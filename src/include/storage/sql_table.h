@@ -15,6 +15,7 @@ namespace terrier {
 // Forward Declaration
 class LargeSqlTableTestObject;
 class RandomSqlTableTransaction;
+class RecoveryBenchmark;
 }  // namespace terrier
 
 namespace terrier::storage {
@@ -204,6 +205,7 @@ class SqlTable {
   friend class terrier::RandomSqlTableTransaction;
   friend class terrier::LargeSqlTableTestObject;
   friend class RecoveryTests;
+  friend class terrier::RecoveryBenchmark;
 
   BlockStore *const block_store_;
 
