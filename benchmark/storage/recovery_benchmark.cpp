@@ -170,8 +170,7 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, HighStress)(benchmark::State &state) {
 
 BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecoveryBenchmark)(benchmark::State &state) {
   uint32_t recovered_txns = 0;
-  uint16_t num_indexes = 10;
-  uint16_t txn_size = 5;
+  uint16_t num_indexes = 1;
   auto db_name = "fuck";
   auto table_name = "shit";
   auto index_name = "bitch";
@@ -215,9 +214,9 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecoveryBenchmark)(benchmark::State &
     auto cols = schema.GetColumns(); // Copy columns
     for (uint16_t i = 0; i < num_indexes; i++) {
       auto index_col = catalog::IndexSchema::Column("index_col", type::TypeId::INTEGER, false, parser::ColumnValueExpression(db_oid, table_oid, schema.GetColumn(0).Oid()));
-      catalog::IndexSchema index_schema({index_col}, false, false, false, true);
+      catalog::IndexSchema index_schema({index_col}, true, false, false, true);
       auto index_oid = catalog_accessor->CreateIndex(namespace_oid, table_oid, index_name + std::to_string(i), index_schema);
-      auto *index = storage::index::IndexBuilder().SetOid(index_oid).SetConstraintType(storage::index::ConstraintType::DEFAULT).SetKeySchema(index_schema).Build();
+      auto *index = storage::index::IndexBuilder().SetOid(index_oid).SetConstraintType(storage::index::ConstraintType::UNIQUE).SetKeySchema(index_schema).Build();
       EXPECT_TRUE(catalog_accessor->SetIndexPointer(index_oid, index));
     }
     txn_manager.Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
@@ -225,14 +224,14 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecoveryBenchmark)(benchmark::State &
     auto initializer = table->InitializerForProjectedRow({schema.GetColumn(0).Oid()});
 
     // Create and execute insert workload. We actually don't need to insert into indexes here, since we only care about recovery doing it
-    auto workload = [&](uint32_t /* unused_attribute */) {
-      for (auto iter = 0; iter < num_txns_ / num_concurrent_txns_; iter++) {
+    auto workload = [&](uint32_t id) {
+      auto start_key =  num_txns_ / num_concurrent_txns_ * id;
+      auto end_key = start_key + num_txns_ / num_concurrent_txns_;
+      for (auto key = start_key; key < end_key; key++) {
         auto *txn = txn_manager.BeginTransaction();
-        for (auto i = 0; i < txn_size; i++) {
-          auto redo_record = txn->StageWrite(db_oid, table_oid, initializer);
-          *reinterpret_cast<int32_t *>(redo_record->Delta()->AccessForceNotNull(0)) = i;
-          table->Insert(txn, redo_record);
-        }
+        auto redo_record = txn->StageWrite(db_oid, table_oid, initializer);
+        *reinterpret_cast<int32_t *>(redo_record->Delta()->AccessForceNotNull(0)) = key;
+        table->Insert(txn, redo_record);
         txn_manager.Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
       }
     };
