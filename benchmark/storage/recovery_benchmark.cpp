@@ -170,7 +170,7 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, HighStress)(benchmark::State &state) {
 
 BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecoveryBenchmark)(benchmark::State &state) {
   uint32_t recovered_txns = 0;
-  uint16_t num_indexes = 1;
+  uint16_t num_indexes = 50;
   auto db_name = "fuck";
   auto table_name = "shit";
   auto index_name = "bitch";
@@ -277,7 +277,7 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecoveryBenchmark)(benchmark::State &
     StorageTestUtil::FullyPerformGC(&gc, &log_manager);
     log_manager.PersistAndStop();
   }
-  state.SetItemsProcessed(recovered_txns);
+  state.SetItemsProcessed(num_txns_ * state.iterations());
 }
 
 //BENCHMARK_REGISTER_F(RecoveryBenchmark, OLTPWorkload)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(3);
