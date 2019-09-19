@@ -209,7 +209,7 @@ void RecoveryManager::UpdateIndexesOnTable(transaction::TransactionContext *txn,
   std::vector<common::ManagedPointer<storage::index::Index>> indexes;
 
   // Stores index schemas, used to get indexcol_ids
-  std::vector<const catalog::IndexSchema *> index_schemas;
+  std::vector<const catalog::IndexSchema*> index_schemas;
 
   // We don't bootstrap the database catalog during recovery, so this means that indexes on catalog tables may not yet
   // be entries in pg_index. Thus, we hardcode these to update
@@ -296,15 +296,10 @@ void RecoveryManager::UpdateIndexesOnTable(transaction::TransactionContext *txn,
     }
 
     default:  // Non-catalog table
-      auto index_oids = db_catalog_ptr->GetIndexes(txn, table_oid);
-      indexes.reserve(index_oids.size());
-      index_schemas.reserve(index_oids.size());
-
-      for (auto &oid : index_oids) {
-        // TODO(Gus, John, Issue #513): These individual calls are inefficient, we should be able to get these objects
-        // with a single call to the catalog
-        indexes.push_back(db_catalog_ptr->GetIndex(txn, oid));
-        index_schemas.push_back(&db_catalog_ptr->GetIndexSchema(txn, oid));
+      auto index_objects = db_catalog_ptr->GetIndexObjects(txn, table_oid);
+      for (const auto& object_pair : index_objects) {
+        indexes.push_back(object_pair.first);
+        index_schemas.push_back(&object_pair.second);
       }
   }
 
@@ -335,7 +330,7 @@ void RecoveryManager::UpdateIndexesOnTable(transaction::TransactionContext *txn,
   // evaluate expressions and that's a nightmare
   for (uint8_t i = 0; i < indexes.size(); i++) {
     auto index = indexes[i];
-    const auto *schema = index_schemas[i];
+    auto schema = index_schemas[i];
     const auto &indexed_attributes = schema->GetIndexedColOids();
 
     // Build the index PR
