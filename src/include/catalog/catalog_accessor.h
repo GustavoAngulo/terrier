@@ -211,13 +211,6 @@ class CatalogAccessor {
   index_oid_t GetIndexOid(namespace_oid_t ns, std::string name) const;
 
   /**
-   * Given a table, find all indexes for data in that table
-   * @param table OID being queried
-   * @return vector of index OIDs that reference the queried table
-   */
-  std::vector<index_oid_t> GetIndexOids(table_oid_t table) const;
-
-  /**
    * Given the index name and its specification, add it to the catalog
    * @param ns is the namespace in which the index will exist
    * @param table on which this index exists
@@ -271,8 +264,8 @@ class CatalogAccessor {
       : catalog_(catalog),
         dbc_(dbc),
         txn_(txn),
-        search_path_({NAMESPACE_CATALOG_NAMESPACE_OID, NAMESPACE_DEFAULT_NAMESPACE_OID}),
-        default_namespace_(NAMESPACE_DEFAULT_NAMESPACE_OID) {}
+        search_path_({postgres::NAMESPACE_CATALOG_NAMESPACE_OID, postgres::NAMESPACE_DEFAULT_NAMESPACE_OID}),
+        default_namespace_(postgres::NAMESPACE_DEFAULT_NAMESPACE_OID) {}
 
  private:
   const common::ManagedPointer<Catalog> catalog_;
