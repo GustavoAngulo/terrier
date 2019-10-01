@@ -5,17 +5,7 @@
 #include "network/connection_context.h"
 #include "network/network_defs.h"
 #include "network/network_types.h"
-#include "network/postgres/postgres_protocol_utils.h"
-
-#define DEFINE_COMMAND(name, flush)                                                                           \
-  class name : public AbstractNetworkCommand {                                                                \
-   public:                                                                                                    \
-    explicit name(InputPacket *in) : AbstractNetworkCommand(in, flush) {}                             \
-    Transition Exec(common::ManagedPointer<ProtocolInterpreter> interpreter,                          \
-                    common::ManagedPointer<PostgresPacketWriter> out,                                         \
-                    common::ManagedPointer<trafficcop::TrafficCop> t_cop,                                     \
-                    common::ManagedPointer<ConnectionContext> connection, NetworkCallback callback) override; \
-  }
+#include "network/protocol_interpreter.h"
 
 namespace terrier::network {
 
@@ -24,20 +14,6 @@ namespace terrier::network {
  */
 class AbstractNetworkCommand {
  public:
-  /**
-   * Executes the command
-   * @param interpreter The protocol interpreter that called this
-   * @param out The Writer on which to construct output packets for the client
-   * @param t_cop The traffic cop pointer
-   * @param connection The ConnectionContext which contains connection information
-   * @param callback The callback function to trigger after
-   * @return The next transition for the client's state machine
-   */
-  virtual Transition Exec(common::ManagedPointer<ProtocolInterpreter> interpreter,
-                          common::ManagedPointer<PostgresPacketWriter> out,
-                          common::ManagedPointer<trafficcop::TrafficCop> t_cop,
-                          common::ManagedPointer<ConnectionContext> connection, NetworkCallback callback) = 0;
-
   /**
    * @return Whether or not to flush the output network packets from this on completion
    */

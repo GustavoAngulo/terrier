@@ -1,8 +1,6 @@
 #pragma once
 #include <memory>
-#include "network/postgres/postgres_network_commands.h"
-
-#define MAKE_COMMAND(type) std::static_pointer_cast<AbstractNetworkCommand, type>(std::make_shared<type>(packet))
+#include "network/abstract_network_commands.h"
 
 namespace terrier::network {
 
