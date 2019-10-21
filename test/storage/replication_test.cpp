@@ -181,6 +181,7 @@ class ReplicationTests : public TerrierTest {
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
 
+    replica_server_->StopServer();
     delete replica_server_;
     delete replica_connection_handle_factory_;
     delete replica_tcop_;
@@ -201,6 +202,14 @@ class ReplicationTests : public TerrierTest {
     EXPECT_TRUE(db_oid != catalog::INVALID_DATABASE_OID);
     return db_oid;
   }
+
+  catalog::namespace_oid_t CreateNamespace(transaction::TransactionContext *txn,
+                                           common::ManagedPointer<catalog::DatabaseCatalog> db_catalog,
+                                           const std::string &namespace_name) {
+    auto namespace_oid = db_catalog->CreateNamespace(txn, namespace_name);
+    EXPECT_TRUE(namespace_oid != catalog::INVALID_NAMESPACE_OID);
+    return namespace_oid;
+  }
 };
 
 TEST_F(ReplicationTests, CreateDatabaseTest) {
@@ -210,12 +219,34 @@ TEST_F(ReplicationTests, CreateDatabaseTest) {
   auto db_oid = CreateDatabase(txn, master_catalog_, database_name);
   master_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
 
-  replication_delay_estimate_ = std::chrono::seconds(2);
+  replication_delay_estimate_ = std::chrono::seconds(1);
   std::this_thread::sleep_for(replication_delay_estimate_);
 
   txn = replica_txn_manager_->BeginTransaction();
   EXPECT_EQ(db_oid, replica_catalog_->GetDatabaseOid(txn, database_name));
   EXPECT_TRUE(replica_catalog_->GetDatabaseCatalog(txn, db_oid));
+  replica_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+}
+
+TEST_F(ReplicationTests, CreateNamespaceTest) {
+  std::string database_name = "testdb";
+  std::string namespace_name = "testns";
+  // Create a database and commit, we should see this one after replication
+  auto *txn = master_txn_manager_->BeginTransaction();
+  auto db_oid = CreateDatabase(txn, master_catalog_, database_name);
+  auto db_catalog = master_catalog_->GetDatabaseCatalog(txn, db_oid);
+  EXPECT_TRUE(db_catalog);
+  auto ns_oid = CreateNamespace(txn, db_catalog, namespace_name);
+  master_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+
+  replication_delay_estimate_ = std::chrono::seconds(1);
+  std::this_thread::sleep_for(replication_delay_estimate_);
+
+  txn = replica_txn_manager_->BeginTransaction();
+  EXPECT_EQ(db_oid, replica_catalog_->GetDatabaseOid(txn, database_name));
+  auto recovered_db_catalog = replica_catalog_->GetDatabaseCatalog(txn, db_oid);
+  EXPECT_TRUE(recovered_db_catalog);
+  EXPECT_EQ(ns_oid, recovered_db_catalog->GetNamespaceOid(txn, namespace_name));
   replica_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
 }
 
