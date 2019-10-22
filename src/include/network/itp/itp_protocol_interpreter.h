@@ -64,18 +64,22 @@ class ITPProtocolInterpreter : public ProtocolInterpreter {
    * Writes result to the client
    * @param out
    */
-  void GetResult(std::shared_ptr<WriteQueue> out) override {
-    ITPPacketWriter writer(out);
-    writer.BeginPacket(NetworkMessageType::ITP_COMMAND_COMPLETE).EndPacket();
-  }
+  void GetResult(std::shared_ptr<WriteQueue> out) override;
+
+ protected:
+  /**
+   * @see ProtocolInterpreter::GetPacketHeaderSize
+   * Header format: 5 byte message size
+   */
+  size_t GetPacketHeaderSize() override;
+
+  /**
+   * @see ProtocolInterpreter::SetPacketMessageType
+   */
+  void SetPacketMessageType(const std::shared_ptr<ReadBuffer> &in) override;
 
  private:
-  InputPacket curr_input_packet_{};
-  std::unordered_map<std::string, std::string> cmdline_options_;
   common::ManagedPointer<ITPCommandFactory> command_factory_;
-
-  bool TryBuildPacket(const std::shared_ptr<ReadBuffer> &in);
-  bool TryReadPacketHeader(const std::shared_ptr<ReadBuffer> &in);
 };
 
 }  // namespace terrier::network

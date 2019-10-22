@@ -3,8 +3,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "network/postgres/postgres_network_commands.h"
-#include "network/postgres/postgres_protocol_interpreter.h"
+#include "network/itp/itp_protocol_interpreter.h"
 #include "network/terrier_server.h"
 #include "traffic_cop/portal.h"
 #include "traffic_cop/traffic_cop.h"
