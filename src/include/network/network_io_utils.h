@@ -133,6 +133,7 @@ class ReadBufferView {
    * @param dest Desired memory location to read into
    */
   void Read(size_t bytes, void *dest) {
+    TERRIER_ASSERT(HasMore(bytes), "Not enough data left to read");
     std::copy(begin_ + offset_, begin_ + offset_ + bytes, reinterpret_cast<uchar *>(dest));
     offset_ += bytes;
   }
@@ -245,6 +246,7 @@ class ReadBuffer : public Buffer {
    * @param size Number of bytes to read
    */
   void FillBufferFrom(ReadBufferView other, size_t size) {
+    TERRIER_ASSERT(size_ + size <= capacity_, "Not enough space to read into");
     other.Read(size, &buf_[size_]);
     size_ += size;
   }
@@ -266,6 +268,8 @@ class ReadBuffer : public Buffer {
    * @return The number of bytes available to be consumed
    */
   size_t BytesAvailable() { return size_ - offset_; }
+
+  size_t SpaceAvailable() { return capacity_ - size_; }
 
   /**
    * Mark a chunk of bytes as read and return a view to the bytes read.

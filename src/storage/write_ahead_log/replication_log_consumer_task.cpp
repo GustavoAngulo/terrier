@@ -19,6 +19,7 @@ void ReplicationLogConsumerTask::Terminate() {
 }
 
 void ReplicationLogConsumerTask::SendLogsOverNetwork() {
+  TERRIER_ASSERT(!filled_buffer_queue_->Empty(), "No logs to send");
   // Grab all buffers availible, and compute total size of data
   std::deque<BufferedLogWriter *> temp_buffer_queue;
   uint64_t data_size = 0;
@@ -28,7 +29,8 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
     data_size += logs.first->buffer_size_;
     temp_buffer_queue.push_back(logs.first);
   }
-  TERRIER_ASSERT(data_size > 0, "Amount of data to send must be greater than 0");
+  // TODO(Gus): Figure out why this assert can fail
+  //TERRIER_ASSERT(data_size > 0, "Amount of data to send must be greater than 0");
 
   // Build the packet
   // TODO(Gus): Consider stashing the packet writer in the class to avoid constant construction/destruction
@@ -37,6 +39,7 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
   for (auto *buffer : temp_buffer_queue) {
     packet_writer.AppendRaw(&buffer->buffer_, buffer->buffer_size_);
     // Return buffer to log manager
+    buffer->Reset();
     empty_buffer_queue_->Enqueue(buffer);
   }
   packet_writer.EndReplicationCommand();

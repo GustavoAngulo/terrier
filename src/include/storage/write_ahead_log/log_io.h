@@ -122,7 +122,7 @@ class BufferedLogWriter {
   uint64_t FlushBuffer(int fd) {
     auto size = buffer_size_;
     PosixIoWrappers::WriteFully(fd, buffer_, buffer_size_);
-    buffer_size_ = 0;
+    Reset();
     return size;
   }
 
@@ -136,9 +136,13 @@ class BufferedLogWriter {
    * @param other buffer to copy from
    */
   void CopyFromBuffer(BufferedLogWriter *other) {
-    TERRIER_ASSERT(CanBuffer(other->buffer_size_), "Not enough space to copy into");
     BufferWrite(other->buffer_, other->buffer_size_);
   }
+
+  /**
+   * Resets the buffer
+   */
+  void Reset() { buffer_size_ = 0; }
 
  private:
   friend class ReplicationLogConsumerTask;

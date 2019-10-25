@@ -152,6 +152,8 @@ class TransactionContext {
    */
   bool IsReadOnly() const { return undo_buffer_.Empty() && loose_ptrs_.empty(); }
 
+  bool IsGCTxn() const { return gc_invocation_txn_; }
+
   /**
    * Defers an action to be called if and only if the transaction aborts.  Actions executed LIFO.
    * @param a the action to be executed. A handle to the system's deferred action manager is supplied
@@ -219,6 +221,9 @@ class TransactionContext {
   // cannot be allowed to commit. Currently, it is flipped by indexes (on unique-key conflicts) or SqlTable (write-write
   // conflicts) and checked in Commit().
   bool must_abort_ = false;
+
+  // This transaction denotes that GC was invoked. It does not have any updates, but is logged to denote that GC has moved forward the oldest active transaction timestamp
+  bool gc_invocation_txn_ = false;
 
   /**
    * @warning This method is ONLY for recovery

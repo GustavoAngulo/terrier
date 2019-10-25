@@ -204,6 +204,7 @@ class SqlTable {
   friend class terrier::RandomSqlTableTransaction;
   friend class terrier::LargeSqlTableTestObject;
   friend class RecoveryTests;
+  friend class ReplicationTests;
 
   BlockStore *const block_store_;
 

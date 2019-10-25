@@ -123,6 +123,7 @@ class ProtocolInterpreter {
     size_t size_needed = curr_input_packet_.extended_
                              ? curr_input_packet_.len_ - curr_input_packet_.buf_->BytesAvailable()
                              : curr_input_packet_.len_;
+    NETWORK_LOG_INFO("Size needed: {0}", size_needed)
 
     size_t can_read = std::min(size_needed, in->BytesAvailable());
     size_t remaining_bytes = size_needed - can_read;
@@ -130,6 +131,10 @@ class ProtocolInterpreter {
     // copy bytes only if the packet is longer than the read buffer,
     // otherwise we can use the read buffer to save space
     if (curr_input_packet_.extended_) {
+      // TODO(Gus): Verify if this is the fix
+//      if (curr_input_packet_.buf_->SpaceAvailable() < can_read) {
+//        return can_read >= 0;
+//      }
       curr_input_packet_.buf_->FillBufferFrom(*in, can_read);
     }
 

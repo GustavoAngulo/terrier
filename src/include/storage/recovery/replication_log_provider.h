@@ -29,13 +29,15 @@ class ReplicationLogProvider final : public AbstractLogProvider {
    * Hands a buffer of log records to the replication provider
    * @param buffer buffer of log records
    */
-  void HandBufferToReplication(std::unique_ptr<network::ReadBuffer> buffer) {
+  void HandBufferToReplication(uint64_t message_id, std::unique_ptr<network::ReadBuffer> buffer) {
     std::unique_lock<std::mutex> lock(replication_latch_);
     arrived_buffer_queue_.emplace(std::move(buffer));
     replication_cv_.notify_one();
   }
 
  private:
+  // TODO(Gus): Remove
+  friend class ReplicationTests;
   // True if replication is active
   bool replication_active_;
 

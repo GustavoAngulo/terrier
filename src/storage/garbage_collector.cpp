@@ -14,7 +14,9 @@ namespace terrier::storage {
 
 std::pair<uint32_t, uint32_t> GarbageCollector::PerformGarbageCollection() {
   if (observer_ != nullptr) observer_->ObserveGCInvocation();
-  timestamp_manager_->CheckOutTimestamp();
+  // TODO(GUS): DO A FUCKING TRANSACTION BOIII
+  auto txn = txn_manager_->BeginTransaction();
+  txn->gc_invocation_txn_ = true;
   const transaction::timestamp_t oldest_txn = timestamp_manager_->OldestTransactionStartTime();
   uint32_t txns_deallocated = ProcessDeallocateQueue(oldest_txn);
   STORAGE_LOG_TRACE("GarbageCollector::PerformGarbageCollection(): txns_deallocated: {}", txns_deallocated);
@@ -29,6 +31,9 @@ std::pair<uint32_t, uint32_t> GarbageCollector::PerformGarbageCollection() {
                     static_cast<uint64_t>(last_unlinked_));
   ProcessDeferredActions(oldest_txn);
   ProcessIndexes();
+
+  // We create and log a dummy txn denoting that the epoch has advanced
+  txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
   return std::make_pair(txns_deallocated, txns_unlinked);
 }
 

@@ -47,6 +47,10 @@ class ReplicationTests : public TerrierTest {
   // Settings for replication
   const std::chrono::seconds replication_timeout_{10};
 
+  // Settings for OLTP style tests
+  const uint64_t num_txns_ = 100;
+  const uint64_t num_concurrent_txns_ = 4;
+
   // General settings
   std::default_random_engine generator_;
   storage::RecordBufferSegmentPool buffer_pool_{2000, 100};
@@ -196,6 +200,44 @@ class ReplicationTests : public TerrierTest {
     delete replica_timestamp_manager_;
   }
 
+  void RunTest(const LargeSqlTableTestConfiguration &config, std::chrono::seconds delay) {
+    // Run workload
+    auto *tested = new LargeSqlTableTestObject(config, master_txn_manager_, master_catalog_, &block_store_, &generator_);
+    tested->SimulateOltp(num_txns_, num_concurrent_txns_);
+
+    replication_delay_estimate_ = delay;
+    std::this_thread::sleep_for(replication_delay_estimate_);
+
+    TERRIER_ASSERT(replica_log_provider_->arrived_buffer_queue_.empty(), "All buffers should be processed by now");
+    TERRIER_ASSERT(replica_recovery_manager_->deferred_txns_.empty(), "All txns should be processed by now");
+
+    // Check we recovered all the original tables
+    for (auto &database : tested->GetTables()) {
+      auto database_oid = database.first;
+      for (auto &table_oid : database.second) {
+        // Get original sql table
+        auto original_txn = master_txn_manager_->BeginTransaction();
+        auto original_sql_table =
+            master_catalog_->GetDatabaseCatalog(original_txn, database_oid)->GetTable(original_txn, table_oid);
+
+        // Get Recovered table
+        auto *recovery_txn = replica_txn_manager_->BeginTransaction();
+        auto db_catalog = replica_catalog_->GetDatabaseCatalog(recovery_txn, database_oid);
+        EXPECT_TRUE(db_catalog != nullptr);
+        auto recovered_sql_table = db_catalog->GetTable(recovery_txn, table_oid);
+        EXPECT_TRUE(recovered_sql_table != nullptr);
+
+        EXPECT_TRUE(StorageTestUtil::SqlTableEqualDeep(
+            original_sql_table->table_.layout_, original_sql_table, recovered_sql_table,
+            tested->GetTupleSlotsForTable(database_oid, table_oid), replica_recovery_manager_->tuple_slot_map_, master_txn_manager_,
+            replica_txn_manager_));
+        master_txn_manager_->Commit(original_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+        replica_txn_manager_->Commit(recovery_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+      }
+    }
+    delete tested;
+  }
+
   catalog::db_oid_t CreateDatabase(transaction::TransactionContext *txn, catalog::Catalog *catalog,
                                    const std::string &database_name) {
     auto db_oid = catalog->CreateDatabase(txn, database_name, true /* bootstrap */);
@@ -211,6 +253,56 @@ class ReplicationTests : public TerrierTest {
     return namespace_oid;
   }
 };
+
+// This test inserts some tuples into a single table. It then recreates the test table from
+// the log, and verifies that this new table is the same as the original table
+// NOLINTNEXTLINE
+TEST_F(ReplicationTests, SingleTableTest) {
+  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
+      .SetNumDatabases(1)
+      .SetNumTables(1)
+      .SetMaxColumns(5)
+      .SetInitialTableSize(1000)
+      .SetTxnLength(5)
+      .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.2, 0.1})
+      .SetVarlenAllowed(true)
+      .Build();
+  RunTest(config, std::chrono::seconds(1));
+}
+
+// This test checks that we recover correctly in a high abort rate workload. We achieve the high abort rate by having
+// large transaction lengths (number of updates). Further, to ensure that more aborted transactions flush logs before
+// aborting, we have transactions make large updates (by having high number columns). This will cause RedoBuffers to
+// fill quickly.
+// NOLINTNEXTLINE
+TEST_F(ReplicationTests, HighAbortRateTest) {
+  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
+      .SetNumDatabases(1)
+      .SetNumTables(1)
+      .SetMaxColumns(1000)
+      .SetInitialTableSize(1000)
+      .SetTxnLength(20)
+      .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
+      .SetVarlenAllowed(true)
+      .Build();
+  RunTest(config, std::chrono::seconds(3));
+}
+
+// This test inserts some tuples into multiple tables across multiple databases. It then recovers these tables, and
+// verifies that the recovered tables are equal to the test tables.
+// NOLINTNEXTLINE
+TEST_F(ReplicationTests, MultiDatabaseTest) {
+  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
+      .SetNumDatabases(3)
+      .SetNumTables(5)
+      .SetMaxColumns(5)
+      .SetInitialTableSize(100)
+      .SetTxnLength(5)
+      .SetInsertUpdateSelectDeleteRatio({0.3, 0.6, 0.0, 0.1})
+      .SetVarlenAllowed(true)
+      .Build();
+  RunTest(config, std::chrono::seconds(2));
+}
 
 TEST_F(ReplicationTests, CreateDatabaseTest) {
   std::string database_name = "testdb";

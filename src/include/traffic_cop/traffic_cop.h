@@ -39,10 +39,10 @@ class TrafficCop {
    * Hands a buffer of logs to replication
    * @param buffer buffer containing logs
    */
-  void HandBufferToReplication(std::unique_ptr<network::ReadBuffer> buffer) {
+  void HandBufferToReplication(uint64_t message_id, std::unique_ptr<network::ReadBuffer> buffer) {
     TERRIER_ASSERT(replication_log_provider_ != DISABLED,
                    "Should not be handing off logs if no log provider was given");
-    replication_log_provider_->HandBufferToReplication(std::move(buffer));
+    replication_log_provider_->HandBufferToReplication(message_id, std::move(buffer));
   }
 
   /**

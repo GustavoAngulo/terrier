@@ -112,6 +112,7 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   FRIEND_TEST(RecoveryTests, DoubleRecoveryTest);
   friend class RecoveryTests;
   friend class terrier::RecoveryBenchmark;
+  friend class ReplicationTests;
 
   // Log provider for reading in logs
   common::ManagedPointer<AbstractLogProvider> log_provider_;
