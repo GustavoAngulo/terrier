@@ -56,7 +56,6 @@ class ProtocolInterpreter {
   virtual ~ProtocolInterpreter() = default;
 
  protected:
-  
   /**
    * Where the data is being forwarded to
    */
@@ -70,14 +69,13 @@ class ProtocolInterpreter {
 
   /**
    * Sets the message type of the current packet
-   * @param curr_input_packet packet to send
+   * @param in ReadBuffer to read input from
    */
   virtual void SetPacketMessageType(const std::shared_ptr<ReadBuffer> &in) = 0;
 
   /**
    * Reads the header of the packet to see if it is valid
    * @param in The ReadBuffer to read input from
-   * @param curr_input_packet packet to send
    * @return whether the packet header is valid or not
    */
   bool TryReadPacketHeader(const std::shared_ptr<ReadBuffer> &in) {
@@ -114,7 +112,6 @@ class ProtocolInterpreter {
   /**
    * Build the packet if it is valid
    * @param in The ReadBuffer to read input from
-   * @param curr_input_packet packet to send
    * @return whether the packet is valid or not
    */
   bool TryBuildPacket(const std::shared_ptr<ReadBuffer> &in) {
@@ -123,7 +120,6 @@ class ProtocolInterpreter {
     size_t size_needed = curr_input_packet_.extended_
                              ? curr_input_packet_.len_ - curr_input_packet_.buf_->BytesAvailable()
                              : curr_input_packet_.len_;
-    NETWORK_LOG_INFO("Size needed: {0}", size_needed)
 
     size_t can_read = std::min(size_needed, in->BytesAvailable());
     size_t remaining_bytes = size_needed - can_read;
@@ -131,10 +127,6 @@ class ProtocolInterpreter {
     // copy bytes only if the packet is longer than the read buffer,
     // otherwise we can use the read buffer to save space
     if (curr_input_packet_.extended_) {
-      // TODO(Gus): Verify if this is the fix
-//      if (curr_input_packet_.buf_->SpaceAvailable() < can_read) {
-//        return can_read >= 0;
-//      }
       curr_input_packet_.buf_->FillBufferFrom(*in, can_read);
     }
 

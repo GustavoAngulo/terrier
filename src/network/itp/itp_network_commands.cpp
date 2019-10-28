@@ -17,7 +17,7 @@ Transition ReplicationCommand::Exec(common::ManagedPointer<ProtocolInterpreter> 
                                     common::ManagedPointer<trafficcop::TrafficCop> t_cop,
                                     common::ManagedPointer<ConnectionContext> connection, NetworkCallback callback) {
   // TODO(Gus): Figure out what to do with message_id
-  auto message_id UNUSED_ATTRIBUTE = in_.ReadValue<uint64_t>();
+  auto message_id = in_.ReadValue<uint64_t>();
   auto data_size = in_.ReadValue<uint64_t>();
   // TODO(Gus): Change to debug log
   NETWORK_LOG_INFO("Message {0} arrived of size {1}", message_id, data_size)
