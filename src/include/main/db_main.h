@@ -7,6 +7,7 @@
 #include "common/stat_registry.h"
 #include "common/worker_pool.h"
 #include "metrics/metrics_manager.h"
+#include "network/itp/itp_command_factory.h"
 #include "network/terrier_server.h"
 #include "settings/settings_manager.h"
 #include "settings/settings_param.h"
@@ -72,8 +73,8 @@ class DBMain {
     delete log_manager_;
     delete connection_handle_factory_;
     delete server_;
-    delete command_factory_;
-    delete provider_;
+    delete psql_command_factory_;
+    delete psql_provider_;
     delete t_cop_;
     delete thread_registry_;
   }
@@ -109,9 +110,11 @@ class DBMain {
   storage::RecordBufferSegmentPool *buffer_segment_pool_;
   common::WorkerPool *thread_pool_;
   trafficcop::TrafficCop *t_cop_;
-  network::PostgresCommandFactory *command_factory_;
+  network::PostgresCommandFactory *psql_command_factory_;
+  network::ITPCommandFactory *itp_command_factory_ = nullptr;  // nullptr if replication disabled
   network::ConnectionHandleFactory *connection_handle_factory_;
-  network::ProtocolInterpreter::Provider *provider_;
+  network::ProtocolInterpreter::Provider *psql_provider_;
+  network::ProtocolInterpreter::Provider *itp_provider_ = nullptr;  // nullptr if replication disabled
   metrics::MetricsManager *metrics_manager_;
   common::DedicatedThreadRegistry *thread_registry_;
 

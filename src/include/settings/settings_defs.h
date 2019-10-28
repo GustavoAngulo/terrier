@@ -2,8 +2,8 @@
 
 // Terrier port
 SETTING_int(
-    port,
-    "Terrier port (default: 15721)",
+    psql_port,
+    "Port number for psql protocol (default: 15721)",
     15721,
     1024,
     65535,
@@ -89,7 +89,7 @@ SETTING_int(
 // Log file persisting interval
 SETTING_int(
     log_persist_interval,
-    "Log file persisiting interval (ms) (default: 10)",
+    "Log file persisting interval (ms) (default: 10)",
     10,
     1,
     10000,
@@ -123,3 +123,11 @@ SETTING_bool(
     true,
     terrier::settings::Callbacks::MetricsTransaction
 )
+
+SETTING_bool(replication_enabled, "Run system with replication", false, false, terrier::settings::Callbacks::NoOp)
+
+SETTING_string(replication_ip_address, "Address to send replication logs to", "", false, terrier::settings::Callbacks::NoOp)
+
+SETTING_int(itp_port, "Port number for internal terrier protocol (ITP)", 9022, 1024, 65535, false, terrier::settings::Callbacks::NoOp)
+
+SETTING_int(replication_master_timeout, "Timeout replication if we don't receive a message from master in this much time (seconds)", 600, 5, 3600, false, terrier::settings::Callbacks::NoOp)

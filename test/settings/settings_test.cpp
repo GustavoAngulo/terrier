@@ -83,11 +83,11 @@ TEST_F(SettingsTests, ImmutableValueTest) {
   std::shared_ptr<common::ActionContext> action_context = std::make_shared<common::ActionContext>(action_id);
 
   // Test immutable parameters.
-  auto port = static_cast<uint16_t>(settings_manager_->GetInt(Param::port));
+  auto port = static_cast<uint16_t>(settings_manager_->GetInt(Param::psql_port));
   EXPECT_EQ(port, 15721);
-  settings_manager_->SetInt(Param::port, 23333, action_context, setter_callback);
+  settings_manager_->SetInt(Param::psql_port, 23333, action_context, setter_callback);
   EXPECT_EQ(common::ActionState::FAILURE, action_context->GetState());
-  port = static_cast<uint16_t>(settings_manager_->GetInt(Param::port));
+  port = static_cast<uint16_t>(settings_manager_->GetInt(Param::psql_port));
   EXPECT_EQ(port, 15721);
 }
 
@@ -133,7 +133,7 @@ TEST_F(SettingsTests, SetterCallbackTest) {
     EXPECT_EQ(action_context->GetState(), common::ActionState::FAILURE);
     SettingsTests::invoked_ = true;
   };
-  settings_manager_->SetInt(Param::port, 9999, context1, callback1);
+  settings_manager_->SetInt(Param::psql_port, 9999, context1, callback1);
   EXPECT_EQ(context1->GetState(), common::ActionState::FAILURE);
   EXPECT_TRUE(SettingsTests::invoked_);
 }

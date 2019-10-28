@@ -5,6 +5,7 @@
 #include "common/managed_pointer.h"
 #include "common/settings.h"
 #include "loggers/loggers_util.h"
+#include "network/itp/itp_protocol_interpreter.h"
 #include "settings/settings_manager.h"
 #include "settings/settings_param.h"
 #include "storage/garbage_collector_thread.h"
@@ -30,14 +31,15 @@ DBMain::DBMain(std::unordered_map<settings::Param, settings::ParamInfo> &&param_
   metrics_manager_ = new metrics::MetricsManager;
   thread_registry_ = new common::DedicatedThreadRegistry(common::ManagedPointer(metrics_manager_));
 
-  // Create LogManager
+  // Create LogManager, if we have specified
   log_manager_ = new storage::LogManager(
       settings_manager_->GetString(settings::Param::log_file_path),
       settings_manager_->GetInt(settings::Param::num_log_manager_buffers),
       std::chrono::milliseconds{settings_manager_->GetInt(settings::Param::log_serialization_interval)},
       std::chrono::milliseconds{settings_manager_->GetInt(settings::Param::log_persist_interval)},
-      settings_manager_->GetInt(settings::Param::log_persist_threshold), buffer_segment_pool_,
-      common::ManagedPointer(thread_registry_));
+      settings_manager_->GetInt(settings::Param::log_persist_threshold),
+      // TODO(Gus): Replace with settings manager fields
+      "", 0, buffer_segment_pool_, common::ManagedPointer(thread_registry_));
   log_manager_->Start();
 
   timestamp_manager_ = new transaction::TimestampManager;
@@ -55,15 +57,25 @@ DBMain::DBMain(std::unordered_map<settings::Param, settings::ParamInfo> &&param_
   t_cop_ = new trafficcop::TrafficCop;
   connection_handle_factory_ = new network::ConnectionHandleFactory(common::ManagedPointer(t_cop_));
 
-  command_factory_ = new network::PostgresCommandFactory;
-  provider_ = new network::PostgresProtocolInterpreter::Provider(common::ManagedPointer(command_factory_));
+  psql_command_factory_ = new network::PostgresCommandFactory;
+  psql_provider_ = new network::PostgresProtocolInterpreter::Provider(common::ManagedPointer(psql_command_factory_));
   server_ = new network::TerrierServer(common::ManagedPointer(connection_handle_factory_),
                                        common::ManagedPointer(thread_registry_));
   // Register psql protocol
   server_->RegisterProtocol(
       static_cast<int16_t>(
-          type::TransientValuePeeker::PeekInteger(param_map_.find(settings::Param::port)->second.value_)),
-      common::ManagedPointer(provider_), CONNECTION_THREAD_COUNT, common::Settings::CONNECTION_BACKLOG);
+          type::TransientValuePeeker::PeekInteger(param_map_.find(settings::Param::psql_port)->second.value_)),
+      common::ManagedPointer(psql_provider_), CONNECTION_THREAD_COUNT, common::Settings::CONNECTION_BACKLOG);
+
+  // Register itp protocol if replication is enabled
+  if (type::TransientValuePeeker::PeekBoolean(param_map_.find(settings::Param::replication_enabled)->second.value_)) {
+    itp_command_factory_ = new network::ITPCommandFactory;
+    itp_provider_ = new network::ITPProtocolInterpreter::Provider(common::ManagedPointer(itp_command_factory_));
+    // For now, we only allow a single connection for the ITP Protocol
+    server_->RegisterProtocol(static_cast<int16_t>(type::TransientValuePeeker::PeekInteger(
+                                  param_map_.find(settings::Param::itp_port)->second.value_)),
+                              common::ManagedPointer(itp_provider_), 1, 1);
+  }
 
   LOG_INFO("Initialization complete")
 }
