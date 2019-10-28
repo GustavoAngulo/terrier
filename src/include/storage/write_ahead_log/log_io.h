@@ -135,9 +135,7 @@ class BufferedLogWriter {
    * Copies the contents of another buffer into this buffer
    * @param other buffer to copy from
    */
-  void CopyFromBuffer(BufferedLogWriter *other) {
-    BufferWrite(other->buffer_, other->buffer_size_);
-  }
+  void CopyFromBuffer(BufferedLogWriter *other) { BufferWrite(other->buffer_, other->buffer_size_); }
 
   /**
    * Resets the buffer

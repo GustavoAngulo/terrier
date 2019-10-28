@@ -202,7 +202,8 @@ class ReplicationTests : public TerrierTest {
 
   void RunTest(const LargeSqlTableTestConfiguration &config, std::chrono::seconds delay) {
     // Run workload
-    auto *tested = new LargeSqlTableTestObject(config, master_txn_manager_, master_catalog_, &block_store_, &generator_);
+    auto *tested =
+        new LargeSqlTableTestObject(config, master_txn_manager_, master_catalog_, &block_store_, &generator_);
     tested->SimulateOltp(num_txns_, num_concurrent_txns_);
 
     replication_delay_estimate_ = delay;
@@ -229,8 +230,8 @@ class ReplicationTests : public TerrierTest {
 
         EXPECT_TRUE(StorageTestUtil::SqlTableEqualDeep(
             original_sql_table->table_.layout_, original_sql_table, recovered_sql_table,
-            tested->GetTupleSlotsForTable(database_oid, table_oid), replica_recovery_manager_->tuple_slot_map_, master_txn_manager_,
-            replica_txn_manager_));
+            tested->GetTupleSlotsForTable(database_oid, table_oid), replica_recovery_manager_->tuple_slot_map_,
+            master_txn_manager_, replica_txn_manager_));
         master_txn_manager_->Commit(original_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
         replica_txn_manager_->Commit(recovery_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
       }
@@ -259,14 +260,14 @@ class ReplicationTests : public TerrierTest {
 // NOLINTNEXTLINE
 TEST_F(ReplicationTests, SingleTableTest) {
   LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-      .SetNumDatabases(1)
-      .SetNumTables(1)
-      .SetMaxColumns(5)
-      .SetInitialTableSize(1000)
-      .SetTxnLength(5)
-      .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.2, 0.1})
-      .SetVarlenAllowed(true)
-      .Build();
+                                              .SetNumDatabases(1)
+                                              .SetNumTables(1)
+                                              .SetMaxColumns(5)
+                                              .SetInitialTableSize(1000)
+                                              .SetTxnLength(5)
+                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.2, 0.1})
+                                              .SetVarlenAllowed(true)
+                                              .Build();
   RunTest(config, std::chrono::seconds(1));
 }
 
@@ -277,14 +278,14 @@ TEST_F(ReplicationTests, SingleTableTest) {
 // NOLINTNEXTLINE
 TEST_F(ReplicationTests, HighAbortRateTest) {
   LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-      .SetNumDatabases(1)
-      .SetNumTables(1)
-      .SetMaxColumns(1000)
-      .SetInitialTableSize(1000)
-      .SetTxnLength(20)
-      .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
-      .SetVarlenAllowed(true)
-      .Build();
+                                              .SetNumDatabases(1)
+                                              .SetNumTables(1)
+                                              .SetMaxColumns(1000)
+                                              .SetInitialTableSize(1000)
+                                              .SetTxnLength(20)
+                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
+                                              .SetVarlenAllowed(true)
+                                              .Build();
   RunTest(config, std::chrono::seconds(3));
 }
 
@@ -293,14 +294,14 @@ TEST_F(ReplicationTests, HighAbortRateTest) {
 // NOLINTNEXTLINE
 TEST_F(ReplicationTests, MultiDatabaseTest) {
   LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-      .SetNumDatabases(3)
-      .SetNumTables(5)
-      .SetMaxColumns(5)
-      .SetInitialTableSize(100)
-      .SetTxnLength(5)
-      .SetInsertUpdateSelectDeleteRatio({0.3, 0.6, 0.0, 0.1})
-      .SetVarlenAllowed(true)
-      .Build();
+                                              .SetNumDatabases(3)
+                                              .SetNumTables(5)
+                                              .SetMaxColumns(5)
+                                              .SetInitialTableSize(100)
+                                              .SetTxnLength(5)
+                                              .SetInsertUpdateSelectDeleteRatio({0.3, 0.6, 0.0, 0.1})
+                                              .SetVarlenAllowed(true)
+                                              .Build();
   RunTest(config, std::chrono::seconds(2));
 }
 

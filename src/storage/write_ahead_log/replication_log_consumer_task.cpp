@@ -30,7 +30,7 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
     temp_buffer_queue.push_back(logs.first);
   }
   // TODO(Gus): Figure out why this assert can fail
-  //TERRIER_ASSERT(data_size > 0, "Amount of data to send must be greater than 0");
+  // TERRIER_ASSERT(data_size > 0, "Amount of data to send must be greater than 0");
 
   // Build the packet
   // TODO(Gus): Consider stashing the packet writer in the class to avoid constant construction/destruction

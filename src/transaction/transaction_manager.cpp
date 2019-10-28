@@ -89,8 +89,9 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
       txn->commit_actions_.pop_front();
     }
 
-    // If logging is enabled and our txn is not read only, or this is a GC txn denoting the refreshing of the cached oldest active txn, we need to persist the oldest active txn at the time we
-    // committed. This will allow us to correctly order and execute transactions during recovery.
+    // If logging is enabled and our txn is not read only, or this is a GC txn denoting the refreshing of the cached
+    // oldest active txn, we need to persist the oldest active txn at the time we committed. This will allow us to
+    // correctly order and execute transactions during recovery.
     timestamp_t oldest_active_txn = INVALID_TXN_TIMESTAMP;
     if (log_manager_ != DISABLED && (!txn->IsReadOnly() || txn->IsGCTxn())) {
       // TODO(Gus): Getting the cached timestamp may cause replication delays, as the cached timestamp is a stale value,

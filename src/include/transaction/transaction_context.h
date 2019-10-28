@@ -222,7 +222,8 @@ class TransactionContext {
   // conflicts) and checked in Commit().
   bool must_abort_ = false;
 
-  // This transaction denotes that GC was invoked. It does not have any updates, but is logged to denote that GC has moved forward the oldest active transaction timestamp
+  // This transaction denotes that GC was invoked. It does not have any updates, but is logged to denote that GC has
+  // moved forward the oldest active transaction timestamp
   bool gc_invocation_txn_ = false;
 
   /**
