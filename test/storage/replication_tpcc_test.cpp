@@ -5,6 +5,8 @@
 #include "catalog/postgres/pg_namespace.h"
 #include "gtest/gtest.h"
 #include "main/db_main.h"
+#include "metrics/logging_metric.h"
+#include "metrics/metrics_thread.h"
 #include "network/itp/itp_protocol_interpreter.h"
 #include "storage/garbage_collector_thread.h"
 #include "storage/index/index_builder.h"
@@ -18,6 +20,11 @@
 #include "util/sql_table_test_util.h"
 #include "util/storage_test_util.h"
 #include "util/test_harness.h"
+#include "util/tpcc/builder.h"
+#include "util/tpcc/database.h"
+#include "util/tpcc/loader.h"
+#include "util/tpcc/worker.h"
+#include "util/tpcc/workload.h"
 
 // Make sure that if you create additional files, you call unlink on them after the test finishes. Otherwise, repeated
 // executions will read old test's data, and the cause of the errors will be hard to identify. Trust me it will drive
@@ -25,7 +32,7 @@
 #define LOG_FILE_NAME "./test.log"
 
 namespace terrier::storage {
-class ReplicationTests : public TerrierTest {
+class ReplicationTPCCTests : public TerrierTest {
  protected:
   // This is an estimate for how long we expect for all the logs to arrive at the replica and be replayed by the
   // recovery manager. You should be pessimistic in setting this number, be sure it is an overestimate. Each test should
@@ -47,17 +54,29 @@ class ReplicationTests : public TerrierTest {
   // Settings for replication
   const std::chrono::seconds replication_timeout_{10};
 
-  // Settings for OLTP style tests
-  const uint64_t num_txns_ = 100;
-  const uint64_t num_threads_ = 4;
+  // Settings for TPCC
+  const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
+  // benchmark. Sometimes called scale factor
+  const uint32_t num_precomputed_txns_per_worker_ = 10000;  // Number of txns to run per terminal (worker thread)
+  tpcc::TransactionWeights txn_weights_;                    // default txn_weights. See definition for values
 
   // General settings
   std::default_random_engine generator_;
-  storage::RecordBufferSegmentPool buffer_pool_{2000, 100};
-  storage::BlockStore block_store_{100, 100};
+  const uint64_t blockstore_size_limit_ = 1000;
+  const uint64_t blockstore_reuse_limit_ = 1000;
+  const uint64_t buffersegment_size_limit_ = 1000000;
+  const uint64_t buffersegment_reuse_limit_ = 1000000;
+  storage::BlockStore block_store_{blockstore_size_limit_, blockstore_reuse_limit_};
+  storage::RecordBufferSegmentPool buffer_pool_{buffersegment_size_limit_, buffersegment_reuse_limit_};
+  common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
   // Settings for gc
   const std::chrono::milliseconds gc_period_{10};
+
+  // Settings for metrics manager
+  const std::chrono::milliseconds metrics_period_{100};
+  const std::vector<metrics::MetricsComponent> metrics_components_ = {metrics::MetricsComponent::LOGGING,
+                                                                      metrics::MetricsComponent::TRANSACTION};
 
   // Master node's components (prefixed with "master_") in order of initialization
   // We need:
@@ -168,6 +187,7 @@ class ReplicationTests : public TerrierTest {
     delete master_gc_thread_;
     StorageTestUtil::FullyPerformGC(master_gc_, master_log_manager_);
     master_log_manager_->PersistAndStop();
+    thread_pool_.Shutdown();
 
     // Delete in reverse order of initialization
     delete master_gc_;
@@ -200,147 +220,84 @@ class ReplicationTests : public TerrierTest {
     delete replica_timestamp_manager_;
   }
 
-  void RunTest(const LargeSqlTableTestConfiguration &config, std::chrono::seconds delay) {
-    // Run workload
-    auto *tested =
-        new LargeSqlTableTestObject(config, master_txn_manager_, master_catalog_, &block_store_, &generator_);
-    tested->SimulateOltp(num_txns_, num_threads_);
+  void RunTPCC(const bool replica_logging_enabled, const bool master_metrics_enabled,
+               const bool replica_metrics_enabled, const storage::index::IndexType type) {
+    // one TPCC worker = one TPCC terminal = one thread
+    std::vector<tpcc::Worker> workers;
+    workers.reserve(num_threads_);
 
-    replication_delay_estimate_ = delay;
+    // we need transactions, TPCC database, and GC
+    metrics::MetricsThread *master_metrics_thread = nullptr;
+    metrics::MetricsThread *replica_metrics_thread = nullptr;
+
+    if (master_metrics_enabled) {
+      master_metrics_thread = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        master_metrics_thread->GetMetricsManager().EnableMetric(component);
+      }
+      // Override thread registry
+      delete master_thread_registry_;
+      master_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(master_metrics_thread->GetMetricsManager())));
+    }
+
+    if (replica_metrics_enabled) {
+      replica_metrics_thread = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        replica_metrics_thread->GetMetricsManager().EnableMetric(component);
+      }
+
+      // Override thread registry
+      delete replica_thread_registry_;
+      replica_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread->GetMetricsManager())));
+    }
+
+    tpcc::Builder tpcc_builder(&block_store_, master_catalog_, master_txn_manager_);
+
+    // Precompute all of the input arguments for every txn to be run. We want to avoid the overhead at benchmark time
+    const auto precomputed_args =
+        PrecomputeArgs(&generator_, txn_weights_, num_threads_, num_precomputed_txns_per_worker_);
+
+    // build the TPCC database
+    auto *const tpcc_db = tpcc_builder.Build(type);
+
+    // prepare the workers
+    workers.clear();
+    for (int8_t i = 0; i < num_threads_; i++) {
+      workers.emplace_back(tpcc_db);
+    }
+
+    // populate the tables and indexes, as well as force log manager to log all changes
+    tpcc::Loader::PopulateDatabase(master_txn_manager_, tpcc_db, &workers, &thread_pool_);
+    master_log_manager_->ForceFlush();
+
+    tpcc::Util::RegisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
+    std::this_thread::sleep_for(std::chrono::seconds(2));  // Let GC clean up
+
+    // run the TPCC workload to completion
+    for (int8_t i = 0; i < num_threads_; i++) {
+      thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
+        Workload(i, tpcc_db, master_txn_manager_, precomputed_args, &workers);
+      });
+    }
+    thread_pool_.WaitUntilAllFinished();
     std::this_thread::sleep_for(replication_delay_estimate_);
 
-    TERRIER_ASSERT(replica_log_provider_->arrived_buffer_queue_.empty(), "All buffers should be processed by now");
-    TERRIER_ASSERT(replica_recovery_manager_->deferred_txns_.empty(), "All txns should be processed by now");
+    // cleanup
+    tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
+    if (master_metrics_enabled) delete master_metrics_thread;
+    if (replica_metrics_enabled) delete replica_metrics_thread;
+    delete tpcc_db;
 
-    // Check we recovered all the original tables
-    for (auto &database : tested->GetTables()) {
-      auto database_oid = database.first;
-      for (auto &table_oid : database.second) {
-        // Get original sql table
-        auto original_txn = master_txn_manager_->BeginTransaction();
-        auto original_sql_table =
-            master_catalog_->GetDatabaseCatalog(original_txn, database_oid)->GetTable(original_txn, table_oid);
-
-        // Get Recovered table
-        auto *recovery_txn = replica_txn_manager_->BeginTransaction();
-        auto db_catalog = replica_catalog_->GetDatabaseCatalog(recovery_txn, database_oid);
-        EXPECT_TRUE(db_catalog != nullptr);
-        auto recovered_sql_table = db_catalog->GetTable(recovery_txn, table_oid);
-        EXPECT_TRUE(recovered_sql_table != nullptr);
-
-        EXPECT_TRUE(StorageTestUtil::SqlTableEqualDeep(
-            original_sql_table->table_.layout_, original_sql_table, recovered_sql_table,
-            tested->GetTupleSlotsForTable(database_oid, table_oid), replica_recovery_manager_->tuple_slot_map_,
-            master_txn_manager_, replica_txn_manager_));
-        master_txn_manager_->Commit(original_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
-        replica_txn_manager_->Commit(recovery_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
-      }
-    }
-    delete tested;
-  }
-
-  catalog::db_oid_t CreateDatabase(transaction::TransactionContext *txn, catalog::Catalog *catalog,
-                                   const std::string &database_name) {
-    auto db_oid = catalog->CreateDatabase(txn, database_name, true /* bootstrap */);
-    EXPECT_TRUE(db_oid != catalog::INVALID_DATABASE_OID);
-    return db_oid;
-  }
-
-  catalog::namespace_oid_t CreateNamespace(transaction::TransactionContext *txn,
-                                           common::ManagedPointer<catalog::DatabaseCatalog> db_catalog,
-                                           const std::string &namespace_name) {
-    auto namespace_oid = db_catalog->CreateNamespace(txn, namespace_name);
-    EXPECT_TRUE(namespace_oid != catalog::INVALID_NAMESPACE_OID);
-    return namespace_oid;
+    CleanUpVarlensInPrecomputedArgs(&precomputed_args);
   }
 };
 
-// This test inserts some tuples into a single table. It then recreates the test table from
-// the log, and verifies that this new table is the same as the original table
 // NOLINTNEXTLINE
-TEST_F(ReplicationTests, SingleTableTest) {
-  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-                                              .SetNumDatabases(1)
-                                              .SetNumTables(1)
-                                              .SetMaxColumns(5)
-                                              .SetInitialTableSize(1000)
-                                              .SetTxnLength(5)
-                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.2, 0.1})
-                                              .SetVarlenAllowed(true)
-                                              .Build();
-  RunTest(config, std::chrono::seconds(1));
-}
-
-//// This test checks that we recover correctly in a high abort rate workload. We achieve the high abort rate by having
-//// large transaction lengths (number of updates). Further, to ensure that more aborted transactions flush logs before
-//// aborting, we have transactions make large updates (by having high number columns). This will cause RedoBuffers to
-//// fill quickly.
-//// NOLINTNEXTLINE
-//TEST_F(ReplicationTests, HighAbortRateTest) {
-//  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-//                                              .SetNumDatabases(1)
-//                                              .SetNumTables(1)
-//                                              .SetMaxColumns(1000)
-//                                              .SetInitialTableSize(1000)
-//                                              .SetTxnLength(20)
-//                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
-//                                              .SetVarlenAllowed(true)
-//                                              .Build();
-//  RunTest(config, std::chrono::seconds(3));
-//}
-
-// This test inserts some tuples into multiple tables across multiple databases. It then recovers these tables, and
-// verifies that the recovered tables are equal to the test tables.
-// NOLINTNEXTLINE
-TEST_F(ReplicationTests, MultiDatabaseTest) {
-  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-                                              .SetNumDatabases(3)
-                                              .SetNumTables(5)
-                                              .SetMaxColumns(5)
-                                              .SetInitialTableSize(100)
-                                              .SetTxnLength(5)
-                                              .SetInsertUpdateSelectDeleteRatio({0.3, 0.6, 0.0, 0.1})
-                                              .SetVarlenAllowed(true)
-                                              .Build();
-  RunTest(config, std::chrono::seconds(2));
-}
-
-TEST_F(ReplicationTests, CreateDatabaseTest) {
-  std::string database_name = "testdb";
-  // Create a database and commit, we should see this one after replication
-  auto *txn = master_txn_manager_->BeginTransaction();
-  auto db_oid = CreateDatabase(txn, master_catalog_, database_name);
-  master_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
-
-  replication_delay_estimate_ = std::chrono::seconds(1);
-  std::this_thread::sleep_for(replication_delay_estimate_);
-
-  txn = replica_txn_manager_->BeginTransaction();
-  EXPECT_EQ(db_oid, replica_catalog_->GetDatabaseOid(txn, database_name));
-  EXPECT_TRUE(replica_catalog_->GetDatabaseCatalog(txn, db_oid));
-  replica_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
-}
-
-TEST_F(ReplicationTests, CreateNamespaceTest) {
-  std::string database_name = "testdb";
-  std::string namespace_name = "testns";
-  // Create a database and commit, we should see this one after replication
-  auto *txn = master_txn_manager_->BeginTransaction();
-  auto db_oid = CreateDatabase(txn, master_catalog_, database_name);
-  auto db_catalog = master_catalog_->GetDatabaseCatalog(txn, db_oid);
-  EXPECT_TRUE(db_catalog);
-  auto ns_oid = CreateNamespace(txn, db_catalog, namespace_name);
-  master_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
-
-  replication_delay_estimate_ = std::chrono::seconds(1);
-  std::this_thread::sleep_for(replication_delay_estimate_);
-
-  txn = replica_txn_manager_->BeginTransaction();
-  EXPECT_EQ(db_oid, replica_catalog_->GetDatabaseOid(txn, database_name));
-  auto recovered_db_catalog = replica_catalog_->GetDatabaseCatalog(txn, db_oid);
-  EXPECT_TRUE(recovered_db_catalog);
-  EXPECT_EQ(ns_oid, recovered_db_catalog->GetNamespaceOid(txn, namespace_name));
-  replica_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+TEST_F(ReplicationTPCCTests, NoMetricsTest) {
+  replication_delay_estimate_ = std::chrono::seconds(5);
+  RunTPCC(false, false, false, storage::index::IndexType::BWTREE);
 }
 
 }  // namespace terrier::storage
