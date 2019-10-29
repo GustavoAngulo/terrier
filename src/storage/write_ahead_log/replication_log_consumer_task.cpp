@@ -25,6 +25,9 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
   uint64_t data_size = 0;
   SerializedLogs logs;
   while (!filled_buffer_queue_->Empty()) {
+    // If our packet grows too big (rare), don't add more buffers
+    if (data_size + (2 * common::Constants::LOG_BUFFER_SIZE) >= PACKET_LEN_LIMIT) break;
+
     filled_buffer_queue_->Dequeue(&logs);
     data_size += logs.first->buffer_size_;
     temp_buffer_queue.push_back(logs.first);

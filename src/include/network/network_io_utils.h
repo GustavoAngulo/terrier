@@ -27,7 +27,6 @@ class Buffer {
    * Instantiates a new buffer and reserve capacity many bytes.
    */
   explicit Buffer(size_t capacity) : capacity_(capacity) {
-    // TODO(tanujnay112) this used to be reserve but nothing was actually getting allocated
     buf_.resize(capacity);
   }
 
@@ -125,6 +124,7 @@ class ReadBufferView {
    * @param begin
    */
   ReadBufferView(size_t size, ByteBuf::const_iterator begin) : size_(size), begin_(begin) {}
+
   /**
    * Read the given number of bytes into destination, advancing cursor by that
    * number. It is up to the caller to ensure that there are enough bytes

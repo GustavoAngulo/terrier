@@ -271,23 +271,23 @@ TEST_F(ReplicationTests, SingleTableTest) {
   RunTest(config, std::chrono::seconds(1));
 }
 
-// This test checks that we recover correctly in a high abort rate workload. We achieve the high abort rate by having
-// large transaction lengths (number of updates). Further, to ensure that more aborted transactions flush logs before
-// aborting, we have transactions make large updates (by having high number columns). This will cause RedoBuffers to
-// fill quickly.
-// NOLINTNEXTLINE
-TEST_F(ReplicationTests, HighAbortRateTest) {
-  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
-                                              .SetNumDatabases(1)
-                                              .SetNumTables(1)
-                                              .SetMaxColumns(1000)
-                                              .SetInitialTableSize(1000)
-                                              .SetTxnLength(20)
-                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
-                                              .SetVarlenAllowed(true)
-                                              .Build();
-  RunTest(config, std::chrono::seconds(3));
-}
+//// This test checks that we recover correctly in a high abort rate workload. We achieve the high abort rate by having
+//// large transaction lengths (number of updates). Further, to ensure that more aborted transactions flush logs before
+//// aborting, we have transactions make large updates (by having high number columns). This will cause RedoBuffers to
+//// fill quickly.
+//// NOLINTNEXTLINE
+//TEST_F(ReplicationTests, HighAbortRateTest) {
+//  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
+//                                              .SetNumDatabases(1)
+//                                              .SetNumTables(1)
+//                                              .SetMaxColumns(1000)
+//                                              .SetInitialTableSize(1000)
+//                                              .SetTxnLength(20)
+//                                              .SetInsertUpdateSelectDeleteRatio({0.2, 0.5, 0.3, 0.0})
+//                                              .SetVarlenAllowed(true)
+//                                              .Build();
+//  RunTest(config, std::chrono::seconds(3));
+//}
 
 // This test inserts some tuples into multiple tables across multiple databases. It then recovers these tables, and
 // verifies that the recovered tables are equal to the test tables.

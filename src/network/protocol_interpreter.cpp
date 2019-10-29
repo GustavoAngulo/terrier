@@ -16,7 +16,7 @@ bool ProtocolInterpreter::TryReadPacketHeader(const std::shared_ptr<ReadBuffer> 
   curr_input_packet_.len_ = in->ReadValue<uint32_t>() - sizeof(uint32_t);
   if (curr_input_packet_.len_ > PACKET_LEN_LIMIT) {
     NETWORK_LOG_ERROR("Packet size {} > limit {}", curr_input_packet_.len_, PACKET_LEN_LIMIT);
-    throw NETWORK_PROCESS_EXCEPTION("Packet too large");
+    throw NETWORK_PROCESS_EXCEPTION("'Arriving packet too large'");
   }
 
   // Extend the buffer as needed
