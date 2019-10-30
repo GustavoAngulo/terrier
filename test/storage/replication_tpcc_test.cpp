@@ -217,6 +217,7 @@ class ReplicationTPCCTests : public TerrierTest {
 
     // Replication should be finished by now, each test should ensure it waits for ample time for everything to
     // replicate
+    replica_recovery_manager_->WaitForRecoveryToFinish();
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
@@ -287,7 +288,6 @@ class ReplicationTPCCTests : public TerrierTest {
       });
     }
     thread_pool_.WaitUntilAllFinished();
-    replica_recovery_manager_->WaitForRecoveryToFinish();
 
     // cleanup
     tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);

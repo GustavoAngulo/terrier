@@ -20,7 +20,7 @@ NetworkIoWrapper::NetworkIoWrapper(const std::string &ip_address, uint16_t port)
   serv_addr.sin_addr.s_addr = inet_addr(ip_address.c_str());
   serv_addr.sin_port = htons(port);
 
-  int64_t ret = connect(socket_fd, reinterpret_cast<sockaddr *>(&serv_addr), sizeof(serv_addr));
+  int64_t ret UNUSED_ATTRIBUTE = connect(socket_fd, reinterpret_cast<sockaddr *>(&serv_addr), sizeof(serv_addr));
   // TODO(Gus): we need better exception handling here
   TERRIER_ASSERT(ret >= 0, "Connection to replica failed");
 
