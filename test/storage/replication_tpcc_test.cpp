@@ -85,6 +85,7 @@ class ReplicationTPCCTests : public TerrierTest {
   //  3. TxnManager
   //  4. Catalog
   //  4. GC
+  metrics::MetricsThread *master_metrics_thread_ = DISABLED;
   common::DedicatedThreadRegistry *master_thread_registry_;
   LogManager *master_log_manager_;
   transaction::TimestampManager *master_timestamp_manager_;
@@ -102,6 +103,7 @@ class ReplicationTPCCTests : public TerrierTest {
   //  5. RecoveryManager
   //  6. TrafficCop
   //  7. TerrierServer
+  metrics::MetricsThread *replica_metrics_thread_ = DISABLED;
   common::DedicatedThreadRegistry *replica_thread_registry_;
   transaction::TimestampManager *replica_timestamp_manager_;
   transaction::DeferredActionManager *replica_deferred_action_manager_;
@@ -121,7 +123,10 @@ class ReplicationTPCCTests : public TerrierTest {
     TerrierTest::SetUp();
     // Unlink log file incase one exists from previous test iteration
     unlink(LOG_FILE_NAME);
+  }
 
+  void InternalSetUp(const bool replica_logging_enabled, const bool master_metrics_enabled,
+                     const bool replica_metrics_enabled) {
     // We first bring up the replica, then the master node
     replica_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
     replica_timestamp_manager_ = new transaction::TimestampManager;
@@ -161,10 +166,21 @@ class ReplicationTPCCTests : public TerrierTest {
     }
 
     // Bring up components for master node
-    master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    if (master_metrics_enabled) {
+      master_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        master_metrics_thread_->GetMetricsManager().EnableMetric(component);
+      }
+      master_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(master_metrics_thread_->GetMetricsManager())));
+    } else {
+      master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    }
+
     master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
                                          log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_,
                                          &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;
     master_deferred_action_manager_ = new transaction::DeferredActionManager(master_timestamp_manager_);
@@ -196,11 +212,11 @@ class ReplicationTPCCTests : public TerrierTest {
     delete master_deferred_action_manager_;
     delete master_timestamp_manager_;
     delete master_log_manager_;
+    delete master_metrics_thread_;
     delete master_thread_registry_;
 
     // Replication should be finished by now, each test should ensure it waits for ample time for everything to
     // replicate
-    replica_recovery_manager_->WaitForRecoveryToFinish();
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
@@ -218,39 +234,28 @@ class ReplicationTPCCTests : public TerrierTest {
     delete replica_txn_manager_;
     delete replica_deferred_action_manager_;
     delete replica_timestamp_manager_;
+    delete replica_metrics_thread_;
+    delete replica_thread_registry_;
   }
 
   void RunTPCC(const bool replica_logging_enabled, const bool master_metrics_enabled,
                const bool replica_metrics_enabled, const storage::index::IndexType type) {
+    InternalSetUp(replica_logging_enabled, master_metrics_enabled, replica_metrics_enabled);
+
     // one TPCC worker = one TPCC terminal = one thread
     std::vector<tpcc::Worker> workers;
     workers.reserve(num_threads_);
 
-    // we need transactions, TPCC database, and GC
-    metrics::MetricsThread *master_metrics_thread = nullptr;
-    metrics::MetricsThread *replica_metrics_thread = nullptr;
-
-    if (master_metrics_enabled) {
-      master_metrics_thread = new metrics::MetricsThread(metrics_period_);
-      for (const auto component : metrics_components_) {
-        master_metrics_thread->GetMetricsManager().EnableMetric(component);
-      }
-      // Override thread registry
-      delete master_thread_registry_;
-      master_thread_registry_ =
-          new common::DedicatedThreadRegistry(common::ManagedPointer(&(master_metrics_thread->GetMetricsManager())));
-    }
-
     if (replica_metrics_enabled) {
-      replica_metrics_thread = new metrics::MetricsThread(metrics_period_);
+      replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
       for (const auto component : metrics_components_) {
-        replica_metrics_thread->GetMetricsManager().EnableMetric(component);
+        replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
       }
 
       // Override thread registry
       delete replica_thread_registry_;
       replica_thread_registry_ =
-          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread->GetMetricsManager())));
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
     }
 
     tpcc::Builder tpcc_builder(&block_store_, master_catalog_, master_txn_manager_);
@@ -282,12 +287,10 @@ class ReplicationTPCCTests : public TerrierTest {
       });
     }
     thread_pool_.WaitUntilAllFinished();
-    std::this_thread::sleep_for(replication_delay_estimate_);
+    replica_recovery_manager_->WaitForRecoveryToFinish();
 
     // cleanup
     tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
-    if (master_metrics_enabled) delete master_metrics_thread;
-    if (replica_metrics_enabled) delete replica_metrics_thread;
     delete tpcc_db;
 
     CleanUpVarlensInPrecomputedArgs(&precomputed_args);
@@ -295,9 +298,15 @@ class ReplicationTPCCTests : public TerrierTest {
 };
 
 // NOLINTNEXTLINE
-TEST_F(ReplicationTPCCTests, NoMetricsTest) {
+TEST_F(ReplicationTPCCTests, DISABLED_NoMetricsTest) {
   replication_delay_estimate_ = std::chrono::seconds(5);
   RunTPCC(false, false, false, storage::index::IndexType::BWTREE);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ReplicationTPCCTests, MasterMetricsTest) {
+  replication_delay_estimate_ = std::chrono::seconds(5);
+  RunTPCC(false, true, false, storage::index::IndexType::BWTREE);
 }
 
 }  // namespace terrier::storage

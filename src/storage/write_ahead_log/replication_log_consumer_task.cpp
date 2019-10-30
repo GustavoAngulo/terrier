@@ -1,5 +1,6 @@
 #include "storage/write_ahead_log/replication_log_consumer_task.h"
 
+#include "loggers/storage_logger.h"
 #include "network/itp/itp_packet_writer.h"
 
 namespace terrier::storage {
@@ -46,6 +47,7 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
     empty_buffer_queue_->Enqueue(buffer);
   }
   packet_writer.EndReplicationCommand();
+  // STORAGE_LOG_INFO("Message {} sending of size {}", message_id_ - 1, data_size)
 
   // Send packet over network
   io_wrapper_->FlushAllWrites();
@@ -65,7 +67,8 @@ void ReplicationLogConsumerTask::ReplicationLogConsumerTaskLoop() {
       std::unique_lock<std::mutex> lock(replication_lock_);
       // We use a CV because we need fast response to when a new buffer appears. We need fast response time because we
       // prioritize a low replication delay
-      replication_log_sender_cv_.wait(lock, [&] { return !run_task_ || !filled_buffer_queue_->Empty(); });
+      // TODO(Gus): We will probably need a more tunable heuristic here
+      replication_log_sender_cv_.wait(lock, [&] { return !run_task_ || filled_buffer_queue_->UnsafeSize() > 10; });
     }
 
     // TODO(gus): perf if taking lock is expensive above. We can modify SendLogsOverNetwork to spin in a loop and grab
