@@ -20,7 +20,7 @@ Transition ReplicationCommand::Exec(common::ManagedPointer<ProtocolInterpreter> 
   auto message_id = in_.ReadValue<uint64_t>();
   auto data_size = in_.ReadValue<uint64_t>();
   // TODO(Gus): Change to debug log
-  NETWORK_LOG_INFO("Message {0} arrived of size {1}", message_id, data_size)
+  // NETWORK_LOG_INFO("Message {0} arrived of size {1}", message_id, data_size)
   TERRIER_ASSERT(in_.HasMore(data_size), "Insufficient replication data in packet");
   auto buffer = std::make_unique<ReadBuffer>(data_size);
   buffer->FillBufferFrom(in_, data_size);

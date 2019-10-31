@@ -1,20 +1,21 @@
+#include <random>
 #include <string>
-#include <unordered_map>
 #include <vector>
+#include "benchmark/benchmark.h"
 #include "catalog/catalog.h"
-#include "catalog/postgres/pg_namespace.h"
-#include "gtest/gtest.h"
-#include "main/db_main.h"
+#include "common/macros.h"
+#include "common/scoped_timer.h"
+#include "common/worker_pool.h"
 #include "metrics/logging_metric.h"
 #include "metrics/metrics_thread.h"
 #include "network/itp/itp_protocol_interpreter.h"
+#include "network/terrier_server.h"
 #include "storage/garbage_collector_thread.h"
 #include "storage/index/index_builder.h"
 #include "storage/recovery/recovery_manager.h"
 #include "storage/recovery/replication_log_provider.h"
 #include "storage/sql_table.h"
 #include "storage/write_ahead_log/log_manager.h"
-#include "transaction/transaction_context.h"
 #include "transaction/transaction_manager.h"
 #include "util/catalog_test_util.h"
 #include "util/sql_table_test_util.h"
@@ -26,19 +27,12 @@
 #include "util/tpcc/worker.h"
 #include "util/tpcc/workload.h"
 
-// Make sure that if you create additional files, you call unlink on them after the test finishes. Otherwise, repeated
-// executions will read old test's data, and the cause of the errors will be hard to identify. Trust me it will drive
-// you nuts...
-#define LOG_FILE_NAME "./test.log"
+#define LOG_FILE_NAME "benchmark.txt"
 
 namespace terrier::storage {
-class ReplicationTPCCTests : public TerrierTest {
- protected:
-  // This is an estimate for how long we expect for all the logs to arrive at the replica and be replayed by the
-  // recovery manager. You should be pessimistic in setting this number, be sure it is an overestimate. Each test should
-  // set it to its own value depending on the amount of work it's doing
-  std::chrono::seconds replication_delay_estimate_;
 
+class ReplicationTPCCBenchmark : public benchmark::Fixture {
+ protected:
   // Settings for log manager
   const uint64_t num_log_buffers_ = 100;
   const std::chrono::microseconds log_serialization_interval_{10};
@@ -57,8 +51,8 @@ class ReplicationTPCCTests : public TerrierTest {
   // Settings for TPCC
   const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
-  const uint32_t num_precomputed_txns_per_worker_ = 10000;  // Number of txns to run per terminal (worker thread)
-  tpcc::TransactionWeights txn_weights_;                    // default txn_weights. See definition for values
+  const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
+  tpcc::TransactionWeights txn_weights_;                     // default txn_weights. See definition for values
 
   // General settings
   std::default_random_engine generator_;
@@ -118,12 +112,6 @@ class ReplicationTPCCTests : public TerrierTest {
   network::ConnectionHandleFactory *replica_connection_handle_factory_;
   trafficcop::TrafficCop *replica_tcop_;
   network::TerrierServer *replica_server_;
-
-  void SetUp() override {
-    TerrierTest::SetUp();
-    // Unlink log file incase one exists from previous test iteration
-    unlink(LOG_FILE_NAME);
-  }
 
   void InternalSetUp(const bool replica_logging_enabled, const bool master_metrics_enabled,
                      const bool replica_metrics_enabled) {
@@ -192,12 +180,6 @@ class ReplicationTPCCTests : public TerrierTest {
     master_gc_thread_ = new storage::GarbageCollectorThread(master_gc_, gc_period_);  // Enable background GC
   }
 
-  void TearDown() override {
-    // Delete log file
-    unlink(LOG_FILE_NAME);
-    TerrierTest::TearDown();
-  }
-
   void InternalTearDown() {
     // Destroy original catalog. We need to manually call GC followed by a ForceFlush because catalog deletion can defer
     // events that create new transactions, which then need to be flushed before they can be GC'd.
@@ -242,73 +224,78 @@ class ReplicationTPCCTests : public TerrierTest {
   }
 
   void RunTPCC(const bool replica_logging_enabled, const bool master_metrics_enabled,
-               const bool replica_metrics_enabled, const storage::index::IndexType type) {
-    InternalSetUp(replica_logging_enabled, master_metrics_enabled, replica_metrics_enabled);
-
-    // one TPCC worker = one TPCC terminal = one thread
-    std::vector<tpcc::Worker> workers;
-    workers.reserve(num_threads_);
-
-    if (replica_metrics_enabled) {
-      replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
-      for (const auto component : metrics_components_) {
-        replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
-      }
-
-      // Override thread registry
-      delete replica_thread_registry_;
-      replica_thread_registry_ =
-          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
-    }
-
-    tpcc::Builder tpcc_builder(&block_store_, master_catalog_, master_txn_manager_);
-
+               const bool replica_metrics_enabled, const storage::index::IndexType type, benchmark::State *state) {
     // Precompute all of the input arguments for every txn to be run. We want to avoid the overhead at benchmark time
     const auto precomputed_args =
         PrecomputeArgs(&generator_, txn_weights_, num_threads_, num_precomputed_txns_per_worker_);
 
-    // build the TPCC database
-    auto *const tpcc_db = tpcc_builder.Build(type);
+    // NOLINTNEXTLINE
+    for (auto _ : *state) {
+      unlink(LOG_FILE_NAME);
+      InternalSetUp(replica_logging_enabled, master_metrics_enabled, replica_metrics_enabled);
+      // one TPCC worker = one TPCC terminal = one thread
+      std::vector<tpcc::Worker> workers;
+      workers.reserve(num_threads_);
 
-    // prepare the workers
-    workers.clear();
-    for (int8_t i = 0; i < num_threads_; i++) {
-      workers.emplace_back(tpcc_db);
+      if (replica_metrics_enabled) {
+        replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
+        for (const auto component : metrics_components_) {
+          replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
+        }
+
+        // Override thread registry
+        delete replica_thread_registry_;
+        replica_thread_registry_ = new common::DedicatedThreadRegistry(
+            common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
+      }
+
+      tpcc::Builder tpcc_builder(&block_store_, master_catalog_, master_txn_manager_);
+
+      // build the TPCC database
+      auto *const tpcc_db = tpcc_builder.Build(type);
+
+      // prepare the workers
+      workers.clear();
+      for (int8_t i = 0; i < num_threads_; i++) {
+        workers.emplace_back(tpcc_db);
+      }
+
+      // populate the tables and indexes, as well as force log manager to log all changes
+      tpcc::Loader::PopulateDatabase(master_txn_manager_, tpcc_db, &workers, &thread_pool_);
+      master_log_manager_->ForceFlush();
+
+      tpcc::Util::RegisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
+      std::this_thread::sleep_for(std::chrono::seconds(2));  // Let GC clean up
+
+      uint64_t elapsed_ms;
+      {
+        common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms);
+        // run the TPCC workload to completion
+        for (int8_t i = 0; i < num_threads_; i++) {
+          thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
+            Workload(i, tpcc_db, master_txn_manager_, precomputed_args, &workers);
+          });
+        }
+        thread_pool_.WaitUntilAllFinished();
+        // cleanup
+        tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
+        delete tpcc_db;
+        InternalTearDown();
+      }
+      state->SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+      unlink(LOG_FILE_NAME);
     }
-
-    // populate the tables and indexes, as well as force log manager to log all changes
-    tpcc::Loader::PopulateDatabase(master_txn_manager_, tpcc_db, &workers, &thread_pool_);
-    master_log_manager_->ForceFlush();
-
-    tpcc::Util::RegisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
-    std::this_thread::sleep_for(std::chrono::seconds(2));  // Let GC clean up
-
-    // run the TPCC workload to completion
-    for (int8_t i = 0; i < num_threads_; i++) {
-      thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
-        Workload(i, tpcc_db, master_txn_manager_, precomputed_args, &workers);
-      });
-    }
-    thread_pool_.WaitUntilAllFinished();
-    // cleanup
-    tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
-    delete tpcc_db;
 
     CleanUpVarlensInPrecomputedArgs(&precomputed_args);
-    InternalTearDown();
+    state->SetItemsProcessed(state->iterations() * num_precomputed_txns_per_worker_ * num_threads_);
   }
 };
 
 // NOLINTNEXTLINE
-TEST_F(ReplicationTPCCTests, NoMetricsTest) {
-  replication_delay_estimate_ = std::chrono::seconds(5);
-  RunTPCC(false, false, false, storage::index::IndexType::BWTREE);
+BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, NoMetrics)(benchmark::State &state) {
+  RunTPCC(false, false, false, storage::index::IndexType::BWTREE, &state);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ReplicationTPCCTests, DISABLED_MasterMetricsTest) {
-  replication_delay_estimate_ = std::chrono::seconds(5);
-  RunTPCC(false, true, false, storage::index::IndexType::BWTREE);
-}
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(20);
 
 }  // namespace terrier::storage

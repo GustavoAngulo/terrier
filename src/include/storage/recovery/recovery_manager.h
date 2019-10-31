@@ -106,6 +106,7 @@ class RecoveryManager : public common::DedicatedThreadOwner {
     if (!thread_registry_->StopTask(this, recovery_task_.CastManagedPointerTo<common::DedicatedThreadTask>())) {
       throw std::runtime_error("Recovery task termination failed");
     }
+    recovery_task_ = nullptr;
   }
 
  private:
