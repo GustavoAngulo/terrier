@@ -41,8 +41,12 @@ void RecoveryManager::RecoverFromLogs() {
         TERRIER_ASSERT(pair.second.empty(), "Commit records should not have any varlen pointers");
         auto *commit_record = log_record->GetUnderlyingRecordBodyAs<CommitRecord>();
 
-        // We defer all transactions initially
-        deferred_txns_.insert(log_record->TxnBegin());
+        // We defer all transactions initially unless they have no changes (GC txns)
+        if (!buffered_changes_map_[log_record->TxnBegin()].empty()) {
+          deferred_txns_.insert(log_record->TxnBegin());
+        } else {
+          buffered_changes_map_.erase(log_record->TxnBegin());
+        }
 
         // Process any deferred transactions that are safe to execute
         recovered_txns_ += ProcessDeferredTransactions(commit_record->OldestActiveTxn());

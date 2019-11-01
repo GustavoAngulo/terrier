@@ -99,10 +99,12 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
       // so transactions may wait for longer than they need to. We should analyze the impact of this when replication is
       // added.
       oldest_active_txn = timestamp_manager_->CachedOldestTransactionStartTime();
-      TXN_LOG_INFO("Txn {0} committed at {1}", txn->StartTime(),
-                   std::chrono::duration_cast<std::chrono::nanoseconds>(
-                       std::chrono::high_resolution_clock::now().time_since_epoch())
-                       .count())
+      if (!txn->IsGCTxn()) {
+        TXN_LOG_INFO("Txn {0} committed at {1}", txn->StartTime(),
+                     std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::high_resolution_clock::now().time_since_epoch())
+                         .count())
+      }
     }
     LogCommit(txn, result, callback, callback_arg, oldest_active_txn);
 
