@@ -48,6 +48,13 @@ void LogManager::ForceFlush() {
   disk_log_writer_task_->persist_cv_.wait(lock, [&] { return !disk_log_writer_task_->do_persist_; });
 }
 
+
+void LogManager::ForceReplicationFlush() {
+  TERRIER_ASSERT(replication_log_consumer_task_ != DISABLED, "Replication must be enabled");
+  log_serializer_task_->Process();
+  while (!replication_consumer_queue_.Empty()) std::this_thread::yield();
+}
+
 void LogManager::PersistAndStop() {
   TERRIER_ASSERT(run_log_manager_, "Can't call PersistAndStop on an un-started LogManager");
   run_log_manager_ = false;

@@ -261,12 +261,19 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
       }
 
       // populate the tables and indexes, as well as force log manager to log all changes
+      TEST_LOG_INFO("Populating database")
       tpcc::Loader::PopulateDatabase(master_txn_manager_, tpcc_db, &workers, &thread_pool_);
       master_log_manager_->ForceFlush();
+      master_log_manager_->ForceReplicationFlush();
+      // Because GC sends the oldest txn messages, we pause it
+      master_gc_thread_->PauseGC();
+      replica_log_provider_->WaitUntilSync();
+      master_gc_thread_->ResumeGC();
 
       tpcc::Util::RegisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
       std::this_thread::sleep_for(std::chrono::seconds(2));  // Let GC clean up
 
+      TEST_LOG_INFO("Starting tpcc")
       uint64_t elapsed_ms;
       {
         common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms);
@@ -277,11 +284,15 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
           });
         }
         thread_pool_.WaitUntilAllFinished();
-        // cleanup
-        tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
-        delete tpcc_db;
-        InternalTearDown();
+        master_log_manager_->ForceReplicationFlush();
+        master_gc_thread_->PauseGC();
+        replica_log_provider_->WaitUntilSync();
+        master_gc_thread_->ResumeGC();
       }
+      // cleanup
+      tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
+      delete tpcc_db;
+      InternalTearDown();
       state->SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
       unlink(LOG_FILE_NAME);
     }

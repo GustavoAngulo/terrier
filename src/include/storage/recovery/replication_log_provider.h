@@ -35,6 +35,12 @@ class ReplicationLogProvider final : public AbstractLogProvider {
     replication_cv_.notify_one();
   }
 
+  // TODO(gus): this method is not entirely correct, there could still be messages over network
+  void WaitUntilSync() {
+    while ((curr_buffer_ != nullptr && curr_buffer_->HasMore()) || !arrived_buffer_queue_.empty()) std::this_thread::yield();
+    STORAGE_LOG_INFO("Replica Synced")
+  }
+
  private:
   // TODO(Gus): Remove
   friend class ReplicationTests;
@@ -95,7 +101,7 @@ class ReplicationLogProvider final : public AbstractLogProvider {
       arrived_buffer_queue_.pop();
     }
 
-    // Read in as much as as is availible in thus buffer.
+    // Read in as much as as is availible in this buffer.
     auto readable_size = curr_buffer_->HasMore(size) ? size : curr_buffer_->BytesAvailable();
     curr_buffer_->ReadIntoView(readable_size).Read(readable_size, dest);
 

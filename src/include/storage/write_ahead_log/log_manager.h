@@ -101,6 +101,8 @@ class LogManager : public common::DedicatedThreadOwner {
    */
   void ForceFlush();
 
+  void ForceReplicationFlush();
+
   /**
    * Persists all unpersisted logs and stops the log manager. Does what Start() does in reverse order:
    *    1. Stops LogSerializerTask
