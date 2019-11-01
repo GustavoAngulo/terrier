@@ -99,6 +99,10 @@ void RecoveryManager::ProcessCommittedTransaction(terrier::transaction::timestam
 
   // Commit the txn
   txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
+  STORAGE_LOG_INFO(
+      "Txn {0} replayed at {1}", txn_id,
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now().time_since_epoch())
+          .count())
 }
 
 void RecoveryManager::DeferRecordDeletes(terrier::transaction::timestamp_t txn_id, bool delete_varlens) {
