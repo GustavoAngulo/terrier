@@ -28,6 +28,7 @@
 #include "util/tpcc/workload.h"
 
 #define LOG_FILE_NAME "benchmark.txt"
+#define REPLICA_LOG_FILE_NAME "benchmark.txt"
 
 namespace terrier::storage {
 
@@ -106,6 +107,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
   common::DedicatedThreadRegistry *replica_thread_registry_;
   transaction::TimestampManager *replica_timestamp_manager_;
   transaction::DeferredActionManager *replica_deferred_action_manager_;
+  LogManager *replica_log_manager_;
   transaction::TransactionManager *replica_txn_manager_;
   catalog::Catalog *replica_catalog_;
   storage::GarbageCollector *replica_gc_;
@@ -121,11 +123,30 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
   void InternalSetUp(const bool replica_logging_enabled, const bool master_metrics_enabled,
                      const bool replica_metrics_enabled) {
     // We first bring up the replica, then the master node
-    replica_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    if (replica_metrics_enabled) {
+      replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
+      }
+      replica_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
+    } else {
+      replica_metrics_thread_ = DISABLED;
+      replica_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    }
     replica_timestamp_manager_ = new transaction::TimestampManager;
     replica_deferred_action_manager_ = new transaction::DeferredActionManager(replica_timestamp_manager_);
+
+    if (replica_logging_enabled) {
+      replica_log_manager_ = new storage::LogManager(
+          REPLICA_LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_,
+          log_persist_threshold_, "", 0, &buffer_pool_, common::ManagedPointer(replica_thread_registry_));
+    } else {
+      replica_log_manager_ = DISABLED;
+    }
+
     replica_txn_manager_ = new transaction::TransactionManager(
-        replica_timestamp_manager_, replica_deferred_action_manager_, &buffer_pool_, true, DISABLED);
+        replica_timestamp_manager_, replica_deferred_action_manager_, &buffer_pool_, true, replica_log_manager_);
     replica_catalog_ = new catalog::Catalog(replica_txn_manager_, &block_store_);
     replica_gc_ = new storage::GarbageCollector(replica_timestamp_manager_, replica_deferred_action_manager_,
                                                 replica_txn_manager_, DISABLED);
@@ -205,6 +226,8 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     // Once master is up, have replica connect, and start recovery
     replica_recovery_manager_->ConnectToMaster(ip_address_, replication_port_ * 2);
     replica_recovery_manager_->StartRecovery();
+
+    thread_pool_.Startup();
   }
 
   void InternalTearDown() {
@@ -252,6 +275,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     delete replica_txn_manager_;
     delete replica_deferred_action_manager_;
     delete replica_timestamp_manager_;
+    delete replica_log_manager_;
     delete replica_metrics_thread_;
     delete replica_thread_registry_;
   }
@@ -269,19 +293,6 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
       // one TPCC worker = one TPCC terminal = one thread
       std::vector<tpcc::Worker> workers;
       workers.reserve(num_threads_);
-
-      if (replica_metrics_enabled) {
-        replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
-        for (const auto component : metrics_components_) {
-          replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
-        }
-
-        // Override thread registry
-        delete replica_thread_registry_;
-        replica_thread_registry_ = new common::DedicatedThreadRegistry(
-            common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
-      }
-
       tpcc::Builder tpcc_builder(&block_store_, master_catalog_, master_txn_manager_);
 
       // build the TPCC database
@@ -340,6 +351,30 @@ BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, NoMetrics)(benchmark::State &state)
   RunTPCC(false, false, false, storage::index::IndexType::BWTREE, &state);
 }
 
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, MasterMetrics)(benchmark::State &state) {
+  RunTPCC(true, true, false, storage::index::IndexType::BWTREE, &state);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, ReplicaMetrics)(benchmark::State &state) {
+  RunTPCC(true, false, true, storage::index::IndexType::BWTREE, &state);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, BothMetrics)(benchmark::State &state) {
+  RunTPCC(true, true, true, storage::index::IndexType::BWTREE, &state);
+}
+
 BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, MasterMetrics)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(5);
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, ReplicaMetrics)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(5);
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, BothMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
 
 }  // namespace terrier::storage
