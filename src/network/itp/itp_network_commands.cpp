@@ -37,4 +37,19 @@ Transition StopReplicationCommand::Exec(common::ManagedPointer<ProtocolInterpret
   return Transition::PROCEED;
 }
 
+Transition CommitTimestampsCommand::Exec(
+    terrier::common::ManagedPointer<terrier::network::ProtocolInterpreter> interpreter,
+    terrier::common::ManagedPointer<terrier::network::ITPPacketWriter> out,
+    terrier::common::ManagedPointer<terrier::trafficcop::TrafficCop> t_cop,
+    terrier::common::ManagedPointer<terrier::network::ConnectionContext> connection,
+    terrier::network::NetworkCallback callback) {
+  std::vector<transaction::timestamp_t> result;
+  auto num_timestamps = in_.ReadValue<size_t>();
+  result.reserve(num_timestamps);
+  for (uint64_t i = 0; i < num_timestamps; i++)
+    result.emplace_back(static_cast<transaction::timestamp_t>(in_.ReadValue<uint64_t>()));
+  t_cop->NotifyOfCommits(result);
+  return Transition::PROCEED;
+}
+
 }  // namespace terrier::network

@@ -22,8 +22,9 @@ class DiskLogConsumerTask final : public LogConsumerTask {
   explicit DiskLogConsumerTask(const char *log_file_path, const std::chrono::milliseconds persist_interval,
                                uint64_t persist_threshold,
                                common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
-                               common::ConcurrentQueue<storage::SerializedLogs> *filled_buffer_queue)
-      : LogConsumerTask(empty_buffer_queue, filled_buffer_queue),
+                               common::ConcurrentQueue<storage::SerializedLogsWithCallbacks> *filled_buffer_queue)
+      : LogConsumerTask(empty_buffer_queue),
+        filled_buffer_queue_(filled_buffer_queue),
         out_(PosixIoWrappers::Open(log_file_path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)),
         persist_interval_(persist_interval),
         persist_threshold_(persist_threshold),
@@ -41,6 +42,10 @@ class DiskLogConsumerTask final : public LogConsumerTask {
 
  private:
   friend class LogManager;
+
+  // The queue containing filled buffers. Task should dequeue filled buffers from this queue to flush
+  common::ConcurrentQueue<SerializedLogsWithCallbacks> *filled_buffer_queue_;
+
   // File descriptor for log file
   int out_;
   // Stores callbacks for commit records written to disk but not yet persisted

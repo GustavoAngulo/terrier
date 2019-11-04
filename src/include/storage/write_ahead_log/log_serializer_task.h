@@ -7,6 +7,7 @@
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/dedicated_thread_task.h"
 #include "storage/record_buffer.h"
+#include "storage/storage_defs.h"
 #include "storage/write_ahead_log/log_record.h"
 
 namespace terrier::storage {
@@ -29,9 +30,9 @@ class LogSerializerTask : public common::DedicatedThreadTask {
   explicit LogSerializerTask(const std::chrono::microseconds serialization_interval,
                              RecordBufferSegmentPool *buffer_pool,
                              common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
-                             common::ConcurrentQueue<storage::SerializedLogs> *disk_consumer_queue,
-                             common::ConcurrentQueue<storage::SerializedLogs> *replication_consumer_queue,
-                             std::condition_variable *disk_log_writer_thread_cv,
+      common::ConcurrentQueue<storage::SerializedLogsWithCallbacks> *disk_consumer_queue,
+      common::ConcurrentQueue<storage::SerializedLogsWithRawCommitTime> *replication_consumer_queue,
+      std::condition_variable *disk_log_writer_thread_cv,
                              std::condition_variable *replication_log_sender_thread_cv)
       : run_task_(false),
         serialization_interval_(serialization_interval),
@@ -94,7 +95,9 @@ class LogSerializerTask : public common::DedicatedThreadTask {
   // Current buffer we are serializing logs to
   BufferedLogWriter *filled_buffer_;
   // Commit callbacks for commit records currently in filled_buffer
-  std::vector<std::pair<transaction::callback_fn, void *>> commits_in_buffer_;
+  std::vector<CommitCallback> commit_callbacks_in_buffer_;
+  // Raw commit timestamps for commit records currently in filled_buffer
+  std::vector<RawCommitTime> commit_raw_ts_in_buffer_;
 
   // Used by the serializer thread to store buffers it has grabbed from the log manager
   std::queue<RecordBufferSegment *> temp_flush_queue_;
@@ -109,8 +112,8 @@ class LogSerializerTask : public common::DedicatedThreadTask {
 
   // The queues containing filled buffers for disk and network consumers. Serializer should push filled serialized
   // buffers into these queues
-  common::ConcurrentQueue<SerializedLogs> *disk_consumer_queue_;
-  common::ConcurrentQueue<SerializedLogs> *replication_consumer_queue_;
+  common::ConcurrentQueue<SerializedLogsWithCallbacks> *disk_consumer_queue_;
+  common::ConcurrentQueue<SerializedLogsWithRawCommitTime> *replication_consumer_queue_;
 
   // Condition variable to signal consumer task threads that a new full buffer has been pushed to the queue
   std::condition_variable *disk_log_writer_thread_cv_;

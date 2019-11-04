@@ -103,6 +103,11 @@ class LogManager : public common::DedicatedThreadOwner {
 
   void ForceReplicationFlush();
 
+  void NotifyOfCommits(const std::vector<terrier::transaction::timestamp_t> &commited_txns) {
+    TERRIER_ASSERT(replication_log_consumer_task_ != DISABLED, "Replication must be enabled");
+    replication_log_consumer_task_->NotifyOfCommits(commited_txns);
+  }
+
   /**
    * Persists all unpersisted logs and stops the log manager. Does what Start() does in reverse order:
    *    1. Stops LogSerializerTask
@@ -167,9 +172,9 @@ class LogManager : public common::DedicatedThreadOwner {
   // serializer thread should block when requesting a new buffer until it receives an empty buffer
   common::ConcurrentBlockingQueue<BufferedLogWriter *> empty_buffer_queue_;
   // The queue containing filled buffers pending flush to the disk
-  common::ConcurrentQueue<SerializedLogs> disk_consumer_queue_;
+  common::ConcurrentQueue<SerializedLogsWithCallbacks> disk_consumer_queue_;
   // The queue containing filled buffers pending to be sent over network
-  common::ConcurrentQueue<SerializedLogs> replication_consumer_queue_;
+  common::ConcurrentQueue<SerializedLogsWithRawCommitTime> replication_consumer_queue_;
 
   // Log serializer task that processes buffers handed over by transactions and serializes them into consumer buffers
   common::ManagedPointer<LogSerializerTask> log_serializer_task_ = common::ManagedPointer<LogSerializerTask>(nullptr);

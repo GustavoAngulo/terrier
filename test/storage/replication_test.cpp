@@ -74,6 +74,11 @@ class ReplicationTests : public TerrierTest {
   catalog::Catalog *master_catalog_;
   storage::GarbageCollector *master_gc_;
   storage::GarbageCollectorThread *master_gc_thread_;
+  network::ITPCommandFactory *master_itp_command_factory_;
+  network::ITPProtocolInterpreter::Provider *master_itp_protocol_provider_;
+  network::ConnectionHandleFactory *master_connection_handle_factory_;
+  trafficcop::TrafficCop *master_tcop_;
+  network::TerrierServer *master_server_;
 
   // Replica node's components (prefixed with "replica_") in order of initialization
   //  1. Thread Registry
@@ -120,7 +125,6 @@ class ReplicationTests : public TerrierTest {
                                                     common::ManagedPointer(replica_catalog_), replica_txn_manager_,
                                                     replica_deferred_action_manager_,
                                                     common::ManagedPointer(replica_thread_registry_), &block_store_);
-    replica_recovery_manager_->StartRecovery();
 
     // Bring up network layer
     replica_itp_command_factory_ = new network::ITPCommandFactory;
@@ -155,6 +159,29 @@ class ReplicationTests : public TerrierTest {
     master_gc_ = new storage::GarbageCollector(master_timestamp_manager_, master_deferred_action_manager_,
                                                master_txn_manager_, DISABLED);
     master_gc_thread_ = new storage::GarbageCollectorThread(master_gc_, gc_period_);  // Enable background GC
+
+    // Bring up master network layer
+    master_itp_command_factory_ = new network::ITPCommandFactory;
+    master_itp_protocol_provider_ =
+        new network::ITPProtocolInterpreter::Provider(common::ManagedPointer(master_itp_command_factory_));
+    master_tcop_ = new trafficcop::TrafficCop(DISABLED, common::ManagedPointer(master_log_manager_));
+    master_connection_handle_factory_ = new network::ConnectionHandleFactory(common::ManagedPointer(master_tcop_));
+    try {
+      master_server_ = new network::TerrierServer(common::ManagedPointer(master_connection_handle_factory_),
+                                                  common::ManagedPointer(master_thread_registry_));
+      master_server_->RegisterProtocol(
+          replication_port_ * 2,
+          common::ManagedPointer<network::ProtocolInterpreter::Provider>(master_itp_protocol_provider_),
+          max_connections_, conn_backlog_);
+      master_server_->RunServer();
+    } catch (NetworkProcessException &exception) {
+      TEST_LOG_ERROR("[LaunchServer] exception when launching server");
+      throw;
+    }
+
+    // Once master is up, have replica connect, and start recovery
+    replica_recovery_manager_->ConnectToMaster(ip_address_, replication_port_ * 2);
+    replica_recovery_manager_->StartRecovery();
   }
 
   void TearDown() override {
@@ -170,6 +197,12 @@ class ReplicationTests : public TerrierTest {
     master_log_manager_->PersistAndStop();
 
     // Delete in reverse order of initialization
+    master_server_->StopServer();
+    delete master_server_;
+    delete master_connection_handle_factory_;
+    delete master_tcop_;
+    delete master_itp_protocol_provider_;
+    delete master_itp_command_factory_;
     delete master_gc_;
     delete master_catalog_;
     delete master_txn_manager_;

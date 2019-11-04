@@ -19,9 +19,8 @@ class LogConsumerTask : public common::DedicatedThreadTask {
    * @param empty_buffer_queue pointer to queue to push empty buffers to
    * @param filled_buffer_queue pointer to queue to pop filled buffers from
    */
-  explicit LogConsumerTask(common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
-                           common::ConcurrentQueue<storage::SerializedLogs> *filled_buffer_queue)
-      : run_task_(false), empty_buffer_queue_(empty_buffer_queue), filled_buffer_queue_(filled_buffer_queue) {}
+  explicit LogConsumerTask(common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue)
+      : run_task_(false), empty_buffer_queue_(empty_buffer_queue) {}
 
   friend class LogManager;
   // Flag to signal task to run or stop
@@ -29,7 +28,5 @@ class LogConsumerTask : public common::DedicatedThreadTask {
 
   // The queue containing empty buffers. Task will enqueue a buffer into this queue when it has consumed its logs
   common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue_;
-  // The queue containing filled buffers. Task should dequeue filled buffers from this queue to flush
-  common::ConcurrentQueue<SerializedLogs> *filled_buffer_queue_;
 };
 }  // namespace terrier::storage

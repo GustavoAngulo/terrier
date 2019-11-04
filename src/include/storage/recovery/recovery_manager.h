@@ -109,6 +109,10 @@ class RecoveryManager : public common::DedicatedThreadOwner {
     recovery_task_ = nullptr;
   }
 
+  void ConnectToMaster(const std::string &ip_address, uint16_t port) {
+    io_wrapper_ = std::make_unique<network::NetworkIoWrapper>(ip_address, port);
+  }
+
  private:
   FRIEND_TEST(RecoveryTests, DoubleRecoveryTest);
   friend class RecoveryTests;
@@ -157,6 +161,11 @@ class RecoveryManager : public common::DedicatedThreadOwner {
 
   // Number of recovered committed txns. Used for benchmarking
   uint32_t recovered_txns_;
+
+  std::unique_ptr<network::NetworkIoWrapper> io_wrapper_ = nullptr;
+
+  std::vector<transaction::timestamp_t> committed_txns_;
+
 
   /**
    * Recovers the databases using the provided log provider

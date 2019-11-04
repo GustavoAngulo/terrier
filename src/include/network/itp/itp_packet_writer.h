@@ -41,6 +41,12 @@ class ITPPacketWriter : public PacketWriter {
    */
   void WriteStopReplicationCommand() { WriteSingleTypePacket(NetworkMessageType::ITP_STOP_REPLICATION_COMMAND); }
 
+  void WriteCommitTimestampsCommand(const std::vector<transaction::timestamp_t> &timestamps) {
+    BeginPacket(NetworkMessageType::ITP_COMMIT_TIMESTAMPS_COMMAND).AppendValue(static_cast<size_t>(timestamps.size()));
+    for (const auto& ts : timestamps) AppendValue(static_cast<uint64_t>(ts));
+    EndPacket();
+  }
+
   /**
    * Tells the client that the command is complete.
    */

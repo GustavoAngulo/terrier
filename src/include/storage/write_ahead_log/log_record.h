@@ -291,13 +291,15 @@ class CommitRecord {
   // TODO(Tianyu): txn should contain a lot of the information here. Maybe we can simplify the function.
   // Note that however when reading log records back in we will not have a proper transaction.
   static LogRecord *Initialize(byte *const head, const transaction::timestamp_t txn_begin,
-                               const transaction::timestamp_t txn_commit, transaction::callback_fn commit_callback,
+                               const transaction::timestamp_t txn_commit, std::chrono::high_resolution_clock::time_point raw_commit_time,
+                               transaction::callback_fn commit_callback,
                                void *commit_callback_arg, const transaction::timestamp_t oldest_active_txn,
                                const bool is_read_only, transaction::TransactionContext *const txn,
                                transaction::TimestampManager *const timestamp_manager) {
     auto *result = LogRecord::InitializeHeader(head, LogRecordType::COMMIT, Size(), txn_begin);
     auto *body = result->GetUnderlyingRecordBodyAs<CommitRecord>();
     body->txn_commit_ = txn_commit;
+    body->raw_commit_time_ = raw_commit_time;
     body->commit_callback_ = commit_callback;
     body->commit_callback_arg_ = commit_callback_arg;
     body->oldest_active_txn_ = oldest_active_txn;
@@ -311,6 +313,8 @@ class CommitRecord {
    * @return the commit time of the transaction that generated this log record
    */
   transaction::timestamp_t CommitTime() const { return txn_commit_; }
+
+  std::chrono::high_resolution_clock::time_point RawCommitTime() const { return raw_commit_time_; }
 
   /**
    * @return the start time of the oldest active transaction at the time that this txn committed
@@ -344,6 +348,7 @@ class CommitRecord {
 
  private:
   transaction::timestamp_t txn_commit_;
+  std::chrono::high_resolution_clock::time_point raw_commit_time_;
   transaction::callback_fn commit_callback_;
   void *commit_callback_arg_;
   transaction::timestamp_t oldest_active_txn_;

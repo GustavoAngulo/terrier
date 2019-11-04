@@ -24,8 +24,9 @@ std::pair<LogRecord *, std::vector<byte *>> AbstractLogProvider::ReadNextRecord(
       // Okay to fill in null since nobody will invoke the callback.
       // is_read_only argument is set to false, because we do not write out a commit record for a transaction if it is
       // not read-only.
-      return {storage::CommitRecord::Initialize(buf, txn_begin, txn_commit, nullptr, nullptr, oldest_active_txn, false,
-                                                nullptr, nullptr),
+      return {storage::CommitRecord::Initialize(buf, txn_begin, txn_commit,
+                                                std::chrono::high_resolution_clock::time_point::min(), nullptr, nullptr,
+                                                oldest_active_txn, false, nullptr, nullptr),
               varlen_contents};
     }
 

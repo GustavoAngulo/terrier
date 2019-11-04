@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <vector>
+#include "common/container/concurrent_map.h"
 #include "network/network_io_utils.h"
 #include "storage/write_ahead_log/log_consumer_task.h"
 
@@ -20,8 +21,8 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
    */
   explicit ReplicationLogConsumerTask(const std::string &ip_address, uint16_t port,
                                       common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
-                                      common::ConcurrentQueue<storage::SerializedLogs> *filled_buffer_queue)
-      : LogConsumerTask(empty_buffer_queue, filled_buffer_queue) {
+                                      common::ConcurrentQueue<storage::SerializedLogsWithRawCommitTime > *filled_buffer_queue)
+      : LogConsumerTask(empty_buffer_queue), filled_buffer_queue_(filled_buffer_queue) {
     io_wrapper_ = std::make_unique<network::NetworkIoWrapper>(ip_address, port);
   }
 
@@ -35,7 +36,12 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
    */
   void Terminate() override;
 
+  void NotifyOfCommits(const std::vector<transaction::timestamp_t> &commited_txns);
+
  private:
+  // The queue containing filled buffers. Task should dequeue filled buffers from this queue to flush
+  common::ConcurrentQueue<SerializedLogsWithRawCommitTime> *filled_buffer_queue_;
+
   friend class LogManager;
   std::unique_ptr<network::NetworkIoWrapper> io_wrapper_;
 
@@ -47,6 +53,9 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
   // Condition variable to signal replication task thread to wake up and send logs over network or if shutdown has
   // initiated, then quit
   std::condition_variable replication_log_sender_cv_;
+
+  // Used to compute replication delay
+  common::ConcurrentMap<transaction::timestamp_t, std::chrono::high_resolution_clock::time_point> raw_commit_ts_;
 
   /**
    * @brief Main task loop.

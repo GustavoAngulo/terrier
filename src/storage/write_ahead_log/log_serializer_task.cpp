@@ -110,16 +110,17 @@ void LogSerializerTask::HandFilledBufferToConsumers() {
     empty_buffer_queue_->Dequeue(&network_buffer);
     network_buffer->CopyFromBuffer(filled_buffer_);
     // For now we pass in an empty commit callback vector
-    replication_consumer_queue_->Enqueue(std::make_pair(network_buffer, std::vector<CommitCallback>()));
+    replication_consumer_queue_->Enqueue(std::make_pair(network_buffer, commit_raw_ts_in_buffer_));
     replication_log_sender_cv_->notify_one();
   }
 
   // Hand over the filled buffer
-  disk_consumer_queue_->Enqueue(std::make_pair(filled_buffer_, commits_in_buffer_));
+  disk_consumer_queue_->Enqueue(std::make_pair(filled_buffer_, commit_callbacks_in_buffer_));
   // Signal disk log consumer task thread that a buffer has been handed over
   disk_log_writer_thread_cv_->notify_one();
   // Mark that the task doesn't have a buffer in its possession to which it can write to
-  commits_in_buffer_.clear();
+  commit_callbacks_in_buffer_.clear();
+  commit_raw_ts_in_buffer_.clear();
   filled_buffer_ = nullptr;
 }
 
@@ -137,7 +138,8 @@ std::pair<uint64_t, uint64_t> LogSerializerTask::SerializeBuffer(
         // necessary for the transaction's callback function to be invoked, but there is no need to serialize it, as
         // it corresponds to a transaction with nothing to redo.
         if (!commit_record->IsReadOnly()) num_bytes += SerializeRecord(record);
-        commits_in_buffer_.emplace_back(commit_record->CommitCallback(), commit_record->CommitCallbackArg());
+        commit_callbacks_in_buffer_.emplace_back(commit_record->CommitCallback(), commit_record->CommitCallbackArg());
+        commit_raw_ts_in_buffer_.emplace_back(commit_record->Txn()->StartTime(), commit_record->RawCommitTime());
         // Once serialization is done, we notify the txn manager to let GC know this txn is ready to clean up
         serialized_txns_[commit_record->TimestampManager()].push_back(record.TxnBegin());
         break;

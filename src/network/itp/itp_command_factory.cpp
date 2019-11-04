@@ -8,6 +8,8 @@ std::unique_ptr<ITPNetworkCommand> ITPCommandFactory::PacketToCommand(InputPacke
       return MAKE_ITP_COMMAND(ReplicationCommand);
     case NetworkMessageType::ITP_STOP_REPLICATION_COMMAND:
       return MAKE_ITP_COMMAND(StopReplicationCommand);
+    case NetworkMessageType::ITP_COMMIT_TIMESTAMPS_COMMAND:
+      return MAKE_ITP_COMMAND(CommitTimestampsCommand);
     default:
       throw NETWORK_PROCESS_EXCEPTION("Unexpected Packet Type: ");
   }

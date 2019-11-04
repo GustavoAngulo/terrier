@@ -215,11 +215,14 @@ enum class LogRecordType : uint8_t { REDO = 1, DELETE, COMMIT, ABORT };
  */
 using CommitCallback = std::pair<transaction::callback_fn, void *>;
 
+using RawCommitTime = std::pair<transaction::timestamp_t, std::chrono::high_resolution_clock::time_point>;
+
 /**
  * A BufferedLogWriter containing serialized logs, as well as all commit callbacks for transaction's whose commit are
  * serialized in this BufferedLogWriter
  */
-using SerializedLogs = std::pair<BufferedLogWriter *, std::vector<CommitCallback>>;
+using SerializedLogsWithCallbacks = std::pair<BufferedLogWriter *, std::vector<CommitCallback>>;
+using SerializedLogsWithRawCommitTime = std::pair<BufferedLogWriter *, std::vector<RawCommitTime>>;
 
 /**
  * A varlen entry is always a 32-bit size field and the varlen content,

@@ -21,7 +21,7 @@ void DiskLogConsumerTask::Terminate() {
 
 void DiskLogConsumerTask::WriteBuffersToLogFile() {
   // Write all the filled buffers to the log file
-  SerializedLogs logs;
+  SerializedLogsWithCallbacks logs;
   while (!filled_buffer_queue_->Empty()) {
     // Dequeue filled buffers and flush them to disk, as well as storing commit callbacks
     filled_buffer_queue_->Dequeue(&logs);

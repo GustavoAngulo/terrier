@@ -14,6 +14,7 @@
 #include "catalog/postgres/pg_index.h"
 #include "catalog/postgres/pg_namespace.h"
 #include "catalog/postgres/pg_type.h"
+#include "network/itp/itp_packet_writer.h"
 #include "storage/index/index_builder.h"
 #include "storage/write_ahead_log/log_io.h"
 
@@ -133,11 +134,20 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
 
   for (auto it = deferred_txns_.begin(); it != upper_bound_it; it++) {
     ProcessCommittedTransaction(*it);
+    committed_txns_.push_back(*it);
     txns_processed++;
   }
 
-  // If we actually processed some txns, remove them from the set
-  if (txns_processed > 0) deferred_txns_.erase(deferred_txns_.begin(), upper_bound_it);
+  // If we actually processed some txns, remove them from the set, and if replication enabled, notify master
+  if (txns_processed > 0 && committed_txns_.size() > 10) {
+    deferred_txns_.erase(deferred_txns_.begin(), upper_bound_it);
+    if (io_wrapper_ != DISABLED) {
+      network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
+      packet_writer.WriteCommitTimestampsCommand(committed_txns_);
+      committed_txns_.clear();
+      io_wrapper_->FlushAllWrites();
+    }
+  }
 
   return txns_processed;
 }
