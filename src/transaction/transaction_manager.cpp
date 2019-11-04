@@ -39,13 +39,14 @@ void TransactionManager::LogCommit(TransactionContext *const txn, const timestam
     storage::CommitRecord::Initialize(commit_record, txn->StartTime(), commit_time, std::chrono::high_resolution_clock::now(), commit_callback,
                                       commit_callback_arg, oldest_active_txn, txn->IsReadOnly() && !txn->IsGCTxn(), txn,
                                       timestamp_manager_);
-
+	/*
     if (!txn->IsGCTxn() && !txn->IsReadOnly()) {
       TXN_LOG_INFO("Txn {0} committed at {1}", txn->StartTime(),
                    std::chrono::duration_cast<std::chrono::nanoseconds>(
                        std::chrono::high_resolution_clock::now().time_since_epoch())
                        .count())
     }
+    */
   } else {
     // Otherwise, logging is disabled. We should pretend to have serialized and flushed the record so the rest of the
     // system proceeds correctly
