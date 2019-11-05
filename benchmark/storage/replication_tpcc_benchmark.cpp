@@ -141,6 +141,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
       replica_log_manager_ = new storage::LogManager(
           REPLICA_LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_,
           log_persist_threshold_, "", 0, &buffer_pool_, common::ManagedPointer(replica_thread_registry_));
+      replica_log_manager_->Start();
     } else {
       replica_log_manager_ = DISABLED;
     }
@@ -261,6 +262,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
+    replica_log_manager_->PersistAndStop();
 
     replica_server_->StopServer();
     delete replica_server_;
@@ -366,7 +368,8 @@ BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, BothMetrics)(benchmark::State &stat
   RunTPCC(true, true, true, storage::index::IndexType::BWTREE, &state);
 }
 
-BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
+// BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark,
+// NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
 BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, MasterMetrics)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
