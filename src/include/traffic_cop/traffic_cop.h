@@ -52,6 +52,10 @@ class TrafficCop {
     log_manager_->NotifyOfCommits(commited_txns);
   }
 
+  void NotifyOfSync() {
+    log_manager_->NotifyOfSync();
+  }
+
   /**
    * Signals to the replication component to stop
    */

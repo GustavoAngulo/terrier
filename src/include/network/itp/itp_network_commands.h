@@ -48,6 +48,7 @@ class ITPNetworkCommand : public NetworkCommand {
 
 DEFINE_ITP_COMMAND(ReplicationCommand, true);
 DEFINE_ITP_COMMAND(CommitTimestampsCommand, true);
+DEFINE_ITP_COMMAND(SyncedCommand, true);
 DEFINE_ITP_COMMAND(StopReplicationCommand, true);
 
 }  // namespace terrier::network

@@ -37,6 +37,15 @@ Transition StopReplicationCommand::Exec(common::ManagedPointer<ProtocolInterpret
   return Transition::PROCEED;
 }
 
+Transition SyncedCommand::Exec(terrier::common::ManagedPointer<terrier::network::ProtocolInterpreter> interpreter,
+                               terrier::common::ManagedPointer<terrier::network::ITPPacketWriter> out,
+                               terrier::common::ManagedPointer<terrier::trafficcop::TrafficCop> t_cop,
+                               terrier::common::ManagedPointer<terrier::network::ConnectionContext> connection,
+                               terrier::network::NetworkCallback callback) {
+  t_cop->NotifyOfSync();
+  return Transition::PROCEED;
+}
+
 Transition CommitTimestampsCommand::Exec(
     terrier::common::ManagedPointer<terrier::network::ProtocolInterpreter> interpreter,
     terrier::common::ManagedPointer<terrier::network::ITPPacketWriter> out,

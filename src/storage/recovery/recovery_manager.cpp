@@ -17,6 +17,7 @@
 #include "network/itp/itp_packet_writer.h"
 #include "storage/index/index_builder.h"
 #include "storage/write_ahead_log/log_io.h"
+#include "storage/recovery/replication_log_provider.h"
 
 namespace terrier::storage {
 
@@ -149,6 +150,13 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
       committed_txns_.clear();
       io_wrapper_->FlushAllWrites();
     }
+  }
+
+  if (deferred_txns_.empty() && io_wrapper_ != DISABLED && !log_provider_.CastManagedPointerTo<storage::ReplicationLogProvider>()->NonBlockingHasMoreRecords()) {
+    network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
+    packet_writer.WriteSyncedCommand();
+    io_wrapper_->FlushAllWrites();
+    STORAGE_LOG_INFO("Notifying master of sync");
   }
 
   return txns_processed;

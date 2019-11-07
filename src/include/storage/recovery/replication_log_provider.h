@@ -41,6 +41,10 @@ class ReplicationLogProvider final : public AbstractLogProvider {
     STORAGE_LOG_INFO("Replica Synced")
   }
 
+  bool NonBlockingHasMoreRecords() const {
+    return (curr_buffer_ != nullptr && curr_buffer_->HasMore()) || !arrived_buffer_queue_.empty();
+  };
+
  private:
   // TODO(Gus): Remove
   friend class ReplicationTests;
@@ -73,10 +77,7 @@ class ReplicationLogProvider final : public AbstractLogProvider {
     //  2. Someone ends replication
     //  3. We have a current buffer and it has more bytes availible
     //  4. A new packet has arrived
-    bool predicate = replication_cv_.wait_for(lock, replication_timeout_, [&] {
-      return !replication_active_ || (curr_buffer_ != nullptr && curr_buffer_->HasMore()) ||
-             !arrived_buffer_queue_.empty();
-    });
+    bool predicate = replication_cv_.wait_for(lock, replication_timeout_, [&] { return !replication_active_ || NonBlockingHasMoreRecords(); });
     // If we time out, predicate == false
     return predicate && replication_active_;
   }
