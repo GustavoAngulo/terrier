@@ -47,6 +47,8 @@ class ITPPacketWriter : public PacketWriter {
     EndPacket();
   }
 
+  void WriteSyncedCommand() { WriteSingleTypePacket(NetworkMessageType::ITP_SYNCED_COMMAND); }
+
   /**
    * Tells the client that the command is complete.
    */

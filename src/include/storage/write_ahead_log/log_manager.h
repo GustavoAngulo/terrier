@@ -108,6 +108,13 @@ class LogManager : public common::DedicatedThreadOwner {
     replication_log_consumer_task_->NotifyOfCommits(commited_txns);
   }
 
+  void NotifyOfSync() { replica_synced_ = true; }
+
+  void BlockUntilSync() {
+    replica_synced_ = false;
+    while (!replica_synced_) std::this_thread::yield();
+  }
+
   /**
    * Persists all unpersisted logs and stops the log manager. Does what Start() does in reverse order:
    *    1. Stops LogSerializerTask
@@ -155,6 +162,8 @@ class LogManager : public common::DedicatedThreadOwner {
  private:
   // Flag to tell us when the log manager is running or during termination
   bool run_log_manager_;
+
+  bool replica_synced_;
 
   // System path for log file
   std::string log_file_path_;
