@@ -16,11 +16,11 @@ void Workload(const int8_t worker_id, Database *const tpcc_db, transaction::Tran
   auto delivery = Delivery(tpcc_db);
   auto stock_level = StockLevel(tpcc_db);
 
-  for (int i = 0; i < precomputed_args[worker_id].size(); i += RATE) {
+  for (uint64_t i = 0; i < precomputed_args[worker_id].size(); i += RATE) {
     uint64_t elapsed_ms = 0;
     {
       common::ScopedTimer<std::chrono::milliseconds> scoped_timer(&elapsed_ms);
-      for (int j = i; j < i + RATE; j++) {
+      for (uint64_t j = i; j < i + RATE; j++) {
         const auto &txn_args = precomputed_args[worker_id][j];
         switch (txn_args.type_) {
           case TransactionType::NewOrder: {
