@@ -82,7 +82,7 @@ Transition NetworkIoWrapper::FlushWriteBuffer(WriteBuffer *wbuf) {
           NETWORK_LOG_TRACE("Client closed during write");
           return Transition::TERMINATE;
         default:
-          NETWORK_LOG_ERROR("Error writing: %s", strerror(errno));
+          NETWORK_LOG_ERROR("Error writing: {0}", strerror(errno));
           throw NETWORK_PROCESS_EXCEPTION("Fatal error during write");
       }
     }
