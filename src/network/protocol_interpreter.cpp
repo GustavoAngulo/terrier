@@ -36,20 +36,16 @@ bool ProtocolInterpreter::TryReadPacketHeader(const std::shared_ptr<ReadBuffer> 
 bool ProtocolInterpreter::TryBuildPacket(const std::shared_ptr<ReadBuffer> &in) {
   if (!TryReadPacketHeader(in)) return false;
 
-  size_t size_needed = curr_input_packet_.extended_
-                           ? curr_input_packet_.len_ - curr_input_packet_.buf_->BytesAvailable()
+  size_t left_to_read = curr_input_packet_.extended_
+                            ? curr_input_packet_.len_ - curr_input_packet_.buf_->BytesAvailable()
                            : curr_input_packet_.len_;
 
-  size_t can_read = std::min(size_needed, in->BytesAvailable());
-  size_t remaining_bytes = size_needed - can_read;
+  size_t can_read = std::min(left_to_read, in->BytesAvailable());
+  size_t remaining_bytes = left_to_read - can_read;
 
   // copy bytes only if the packet is longer than the read buffer,
   // otherwise we can use the read buffer to save space
-  if (curr_input_packet_.extended_) {
-    // TODO(Gus): Figure out why this seems to fix things
-    if (curr_input_packet_.buf_->SpaceAvailable() < can_read) return can_read >= 0;
-    curr_input_packet_.buf_->FillBufferFrom(*in, can_read);
-  }
+  if (curr_input_packet_.extended_) curr_input_packet_.buf_->FillBufferFrom(*in, can_read);
 
   return remaining_bytes <= 0;
 }

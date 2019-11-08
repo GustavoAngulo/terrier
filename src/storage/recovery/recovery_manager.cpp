@@ -142,7 +142,7 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
   }
 
   // If we actually processed some txns, remove them from the set, and if replication enabled, notify master
-  if (txns_processed > 0 && committed_txns_.size() > 10) {
+  if (txns_processed > 0) {
     deferred_txns_.erase(deferred_txns_.begin(), upper_bound_it);
     if (io_wrapper_ != DISABLED) {
       network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());

@@ -83,7 +83,7 @@ void ReplicationLogConsumerTask::ReplicationLogConsumerTaskLoop() {
       // We use a CV because we need fast response to when a new buffer appears. We need fast response time because we
       // prioritize a low replication delay
       // TODO(Gus): We will probably need a more tunable heuristic here
-      replication_log_sender_cv_.wait(lock, [&] { return !run_task_ || filled_buffer_queue_->UnsafeSize() > 10; });
+      replication_log_sender_cv_.wait(lock, [&] { return !run_task_ || !filled_buffer_queue_->Empty(); });
     }
 
     // TODO(gus): perf if taking lock is expensive above. We can modify SendLogsOverNetwork to spin in a loop and grab

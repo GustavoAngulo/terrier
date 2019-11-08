@@ -172,6 +172,7 @@ struct InputPacket {
     len_ = 0;
     buf_ = nullptr;
     header_parsed_ = false;
+    extended_ = false;
   }
 };
 
