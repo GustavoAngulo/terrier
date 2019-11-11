@@ -24,6 +24,9 @@ namespace terrier::storage {
 void RecoveryManager::RecoverFromLogs() {
   // Replay logs until the log provider no longer gives us logs
   while (true) {
+
+    while (paused_) std::this_thread::yield();
+
     auto pair = log_provider_->GetNextRecord();
     auto *log_record = pair.first;
 

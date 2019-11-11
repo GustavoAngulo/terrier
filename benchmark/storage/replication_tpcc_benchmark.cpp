@@ -50,7 +50,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
   const std::chrono::seconds replication_timeout_{10};
 
   // Settings for TPCC
-  const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
+  const int8_t num_threads_ = 6;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
   const uint32_t num_precomputed_txns_per_worker_ = 1000;  // Number of txns to run per terminal (worker thread)
   tpcc::TransactionWeights txn_weights_;                     // default txn_weights. See definition for values
@@ -316,13 +316,16 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
       replica_log_provider_->WaitUntilSync();
       master_gc_thread_->ResumeGC();
 
+      // pause recovery
+      replica_recovery_manager_->PauseRecovery();
+
       tpcc::Util::RegisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
       std::this_thread::sleep_for(std::chrono::seconds(2));  // Let GC clean up
 
       TEST_LOG_INFO("Starting tpcc")
-      uint64_t elapsed_ms;
+      uint64_t elapsed_ms_execution;
       {
-        common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms);
+        common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms_execution);
         // run the TPCC workload to completion
         for (int8_t i = 0; i < num_threads_; i++) {
           thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
@@ -330,16 +333,26 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
           });
         }
         thread_pool_.WaitUntilAllFinished();
-        master_log_manager_->ForceReplicationFlush();
-        master_gc_thread_->PauseGC();
-        replica_log_provider_->WaitUntilSync();
-        master_gc_thread_->ResumeGC();
       }
+
+
+      uint64_t elapsed_ms_replication;
+      master_log_manager_->ForceReplicationFlush();
+      {
+          common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms_replication);
+          replica_recovery_manager_->UnpauseRecovery();
+          master_gc_thread_->PauseGC();
+          replica_log_provider_->WaitUntilSync();
+          master_gc_thread_->ResumeGC();
+      }
+
+      TEST_LOG_INFO("Execution {1} ms, recovery {2} ms", elapsed_ms_execution, elapsed_ms_replication)
+
       // cleanup
       tpcc::Util::UnregisterIndexesForGC(&(master_gc_thread_->GetGarbageCollector()), tpcc_db);
       delete tpcc_db;
       InternalTearDown();
-      state->SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+      state->SetIterationTime(static_cast<double>(0) / 1000.0);
       unlink(LOG_FILE_NAME);
     }
 
@@ -368,8 +381,8 @@ BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, BothMetrics)(benchmark::State &stat
   RunTPCC(true, true, true, storage::index::IndexType::BWTREE, &state);
 }
 
-// BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark,
-// NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
+/*
 BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, MasterMetrics)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
@@ -379,5 +392,5 @@ BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, ReplicaMetrics)
     ->UseManualTime()
     ->MinTime(5);
 BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, BothMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
-
+*/
 }  // namespace terrier::storage

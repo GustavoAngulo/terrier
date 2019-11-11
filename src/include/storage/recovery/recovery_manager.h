@@ -109,6 +109,14 @@ class RecoveryManager : public common::DedicatedThreadOwner {
     recovery_task_ = nullptr;
   }
 
+  void PauseRecovery() {
+      paused_ = true;
+  }
+
+  void UnpauseRecovery() {
+      paused_ = false;
+  }
+
   void ConnectToMaster(const std::string &ip_address, uint16_t port) {
     io_wrapper_ = std::make_unique<network::NetworkIoWrapper>(ip_address, port);
   }
@@ -118,6 +126,8 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   friend class RecoveryTests;
   friend class terrier::RecoveryBenchmark;
   friend class ReplicationTests;
+
+  bool paused_ = false;
 
   // Log provider for reading in logs
   common::ManagedPointer<AbstractLogProvider> log_provider_;
