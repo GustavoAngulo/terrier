@@ -2,6 +2,9 @@
 
 #include <chrono>  // NOLINT
 
+#define NUM_METRICS 11
+#define METRICS_FACTOR (288 / NUM_METRICS)
+
 namespace terrier::metrics {
 
 /**
