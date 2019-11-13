@@ -262,7 +262,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
-    replica_log_manager_->PersistAndStop();
+    if (replica_log_manager_ != DISABLED) replica_log_manager_->PersistAndStop();
 
     replica_server_->StopServer();
     delete replica_server_;
