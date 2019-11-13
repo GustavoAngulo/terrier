@@ -24,5 +24,15 @@ struct MetricsUtil {
                std::chrono::high_resolution_clock::now().time_since_epoch())
         .count();
   }
+
+
+  static void ScaleMetrics() {
+      for (volatile uint64_t i = 0; i < METRICS_FACTOR; i++) {
+          volatile auto now = MetricsUtil::Now();
+          (void*)now;
+      }
+  }
+
+
 };
 }  // namespace terrier::metrics

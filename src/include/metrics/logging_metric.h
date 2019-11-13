@@ -72,13 +72,18 @@ class LoggingMetricRawData : public AbstractRawData {
   FRIEND_TEST(MetricsTests, LoggingCSVTest);
 
   void RecordSerializerData(const uint64_t elapsed_us, const uint64_t num_bytes, const uint64_t num_records) {
-    for (uint64_t i = 0; i < METRICS_FACTOR; i++) serializer_data_.emplace_front(elapsed_us, num_bytes, num_records);
+
+    for (volatile uint64_t i = 0; i < METRICS_FACTOR; i++) {
+        serializer_data_.emplace_front(elapsed_us, num_bytes, num_records);
+    }
   }
 
   void RecordConsumerData(const uint64_t write_us, const uint64_t persist_us, const uint64_t num_bytes,
                           const uint64_t num_buffers) {
-    for (uint64_t i = 0; i < METRICS_FACTOR; i++)
+
+    for (volatile uint64_t i = 0; i < METRICS_FACTOR; i++) {
       consumer_data_.emplace_front(write_us, persist_us, num_bytes, num_buffers);
+    }
   }
 
   struct SerializerData {
