@@ -2,7 +2,7 @@
 #include <common/scoped_timer.h>
 #include <vector>
 
-#define RATE 1000
+#define RATE 10000
 
 #define INTERVAL std::chrono::milliseconds(1000)
 
@@ -50,7 +50,6 @@ void Workload(const int8_t worker_id, Database *const tpcc_db, transaction::Tran
     }
     auto elapsed_time = std::chrono::milliseconds(elapsed_ms);
     if (elapsed_time < INTERVAL) {
-      TEST_LOG_INFO("Sleeping for {} ms", (INTERVAL - elapsed_time).count())
       std::this_thread::sleep_for(INTERVAL - elapsed_time);
     }
   }

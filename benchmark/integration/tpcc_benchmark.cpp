@@ -19,7 +19,7 @@
 
 namespace terrier::tpcc {
 
-#define LOG_FILE_NAME "/mnt/ramdisk/tpcc.log"
+#define LOG_FILE_NAME "tpcc.log"
 
 /**
  * The behavior in these benchmarks mimics that of /test/integration/tpcc_test.cpp. If something changes here, it should
@@ -244,10 +244,14 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, ScaleFactor4WithLoggingAndMetrics)(benchmark::
     thread_pool_.Startup();
     unlink(LOG_FILE_NAME);
     for (const auto &file : metrics::LoggingMetricRawData::FILES) unlink(std::string(file).c_str());
+    for (const auto &file : metrics::TransactionMetricRawData::FILES) unlink(std::string(file).c_str());
+
     auto *const metrics_thread = new metrics::MetricsThread(metrics_period_);
     metrics_thread->GetMetricsManager().EnableMetric(metrics::MetricsComponent::LOGGING);
+    metrics_thread->GetMetricsManager().EnableMetric(metrics::MetricsComponent::TRANSACTION);
     thread_registry_ =
         new common::DedicatedThreadRegistry(common::ManagedPointer(&(metrics_thread->GetMetricsManager())));
+    metrics_thread->GetMetricsManager().RegisterThread();
     // we need transactions, TPCC database, and GC
     log_manager_ = new storage::LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
                                            log_persist_interval_, log_persist_threshold_, "" /* replication disabled */,
@@ -284,7 +288,8 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, ScaleFactor4WithLoggingAndMetrics)(benchmark::
     {
       common::ScopedTimer<std::chrono::milliseconds> timer(&elapsed_ms);
       for (int8_t i = 0; i < num_threads_; i++) {
-        thread_pool_.SubmitTask([i, tpcc_db, &txn_manager, &precomputed_args, &workers] {
+        thread_pool_.SubmitTask([i, tpcc_db, &txn_manager, &precomputed_args, &workers, &metrics_thread] {
+          metrics_thread->GetMetricsManager().RegisterThread();
           Workload(i, tpcc_db, &txn_manager, precomputed_args, &workers);
         });
       }
@@ -407,23 +412,23 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, ScaleFactor4WithMetrics)(benchmark::State &sta
   }
 }
 
-BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithoutLogging)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(20);
-
-BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithLogging)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(20);
+// BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithoutLogging)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(20);
+//
+// BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithLogging)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(20);
 
 BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithLoggingAndMetrics)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(20);
 
-BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithMetrics)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(20);
+// BENCHMARK_REGISTER_F(TPCCBenchmark, ScaleFactor4WithMetrics)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(20);
 }  // namespace terrier::tpcc
