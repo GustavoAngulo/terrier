@@ -33,14 +33,14 @@ namespace terrier::storage {
 
 class ReplicationTPCCReplicaTest : public TerrierTest {
  protected:
-  const uint8_t master_wait_time_ = 10;
+  const uint8_t master_wait_time_ = 3;
 
   // Settings for log manager
   const uint64_t num_log_buffers_ = 10000;
   const std::chrono::microseconds log_serialization_interval_{10};
   const std::chrono::milliseconds log_persist_interval_{20};
   const uint64_t log_persist_threshold_ = (1 << 20);  // 1MB
-  const std::string ip_address_ = "127.0.0.1";
+  const std::string master_ip_address_ = "172.19.146.5";
   const uint16_t replication_port_ = 9022;
 
   // Settings for server
@@ -179,7 +179,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     TEST_LOG_INFO("Safe to bring up master, sleeping for {} sec", master_wait_time_)
     std::this_thread::sleep_for(std::chrono::seconds(master_wait_time_));
     TEST_LOG_INFO("Waking up, connecting to master...")
-    replica_recovery_manager_->ConnectToMaster(ip_address_, replication_port_ * 2);
+    replica_recovery_manager_->ConnectToMaster(master_ip_address_, replication_port_ * 2);
     TEST_LOG_INFO("Connected to master!")
     replica_recovery_manager_->StartRecovery();
 
