@@ -19,10 +19,13 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
    * @param persist_interval Interval time for when to persist log file
    * @param persist_threshold threshold of data written since the last persist to trigger another persist
    */
-  explicit ReplicationLogConsumerTask(const std::string &ip_address, uint16_t port,
-                                      common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
+  explicit ReplicationLogConsumerTask(
+      const std::string &ip_address, uint16_t port, bool synchronous_replication,
+      common::ConcurrentBlockingQueue<BufferedLogWriter *> *empty_buffer_queue,
                                       common::ConcurrentQueue<storage::SerializedLogsWithRawCommitTime > *filled_buffer_queue)
-      : LogConsumerTask(empty_buffer_queue), filled_buffer_queue_(filled_buffer_queue) {
+      : LogConsumerTask(empty_buffer_queue),
+        synchronous_replication_(synchronous_replication),
+        filled_buffer_queue_(filled_buffer_queue) {
     io_wrapper_ = std::make_unique<network::NetworkIoWrapper>(ip_address, port);
   }
 
@@ -39,6 +42,9 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
   void NotifyOfCommits(const std::vector<transaction::timestamp_t> &commited_txns);
 
  private:
+  // If synchronous replication is enabled. If so, we save the raw commit timestamps for shipped transaction
+  const bool synchronous_replication_;
+
   // The queue containing filled buffers. Task should dequeue filled buffers from this queue to flush
   common::ConcurrentQueue<SerializedLogsWithRawCommitTime> *filled_buffer_queue_;
 

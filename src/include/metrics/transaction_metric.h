@@ -69,11 +69,11 @@ class TransactionMetricRawData : public AbstractRawData {
   FRIEND_TEST(MetricsTests, TransactionCSVTest);
 
   void RecordBeginData(const uint64_t elapsed_us, const transaction::timestamp_t txn_start) {
-    begin_data_.emplace_back(elapsed_us, txn_start);
+    for (uint64_t i = 0; i < METRICS_FACTOR; i++) begin_data_.emplace_back(elapsed_us, txn_start);
   }
 
   void RecordCommitData(const uint64_t elapsed_us, const transaction::timestamp_t txn_start) {
-    commit_data_.emplace_back(elapsed_us, txn_start);
+    for (uint64_t i = 0; i < METRICS_FACTOR; i++) commit_data_.emplace_back(elapsed_us, txn_start);
   }
 
   struct Data {

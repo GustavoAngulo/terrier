@@ -244,6 +244,7 @@ uint64_t LogSerializerTask::SerializeRecord(const terrier::storage::LogRecord &r
       auto *record_body = record.GetUnderlyingRecordBodyAs<CommitRecord>();
       num_bytes += WriteValue(record_body->CommitTime());
       num_bytes += WriteValue(record_body->OldestActiveTxn());
+      num_bytes += WriteValue(record_body->RawCommitTime());
       break;
     }
     case LogRecordType::ABORT: {

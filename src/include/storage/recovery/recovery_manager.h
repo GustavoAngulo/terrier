@@ -16,6 +16,7 @@
 #include "catalog/postgres/pg_namespace.h"
 #include "common/dedicated_thread_owner.h"
 #include "storage/recovery/abstract_log_provider.h"
+#include "storage/recovery/replication_log_provider.h"
 #include "storage/sql_table.h"
 #include "transaction/transaction_manager.h"
 
@@ -146,6 +147,8 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   // though snapshot isolation would handle write-write conflicts, DDL changes such as DROP TABLE combined with GC could
   // lead to issues if we don't execute transactions in complete serial order.
   std::set<transaction::timestamp_t> deferred_txns_;
+
+  std::unordered_map<transaction::timestamp_t, std::chrono::high_resolution_clock::time_point> raw_commit_time_;
 
   // Used during recovery from log. Maps a the txn id from the persisted txn to its changes we have buffered. We buffer
   // changes until commit time. This ensures serializability, and allows us to skip changes from aborted txns.
@@ -370,5 +373,15 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   const catalog::Schema &GetTableSchema(transaction::TransactionContext *txn,
                                         const common::ManagedPointer<catalog::DatabaseCatalog> &db_catalog,
                                         catalog::table_oid_t table_oid) const;
+
+  bool IsAsynchronousReplication() const {
+    return io_wrapper_ != DISABLED &&
+           !log_provider_.CastManagedPointerTo<storage::ReplicationLogProvider>()->IsSynchronousReplication();
+  }
+
+  bool IsSynchronousReplication() const {
+    return io_wrapper_ != DISABLED &&
+           log_provider_.CastManagedPointerTo<storage::ReplicationLogProvider>()->IsSynchronousReplication();
+  }
 };
 }  // namespace terrier::storage

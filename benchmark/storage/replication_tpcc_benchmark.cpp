@@ -52,7 +52,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
   // Settings for TPCC
   const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
-  const uint32_t num_precomputed_txns_per_worker_ = 1000;  // Number of txns to run per terminal (worker thread)
+  const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
   tpcc::TransactionWeights txn_weights_;                     // default txn_weights. See definition for values
 
   // General settings
@@ -262,7 +262,7 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
-    replica_log_manager_->PersistAndStop();
+    if (replica_log_manager_ != DISABLED) replica_log_manager_->PersistAndStop();
 
     replica_server_->StopServer();
     delete replica_server_;

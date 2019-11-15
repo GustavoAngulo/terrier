@@ -17,7 +17,6 @@
 #include "network/itp/itp_packet_writer.h"
 #include "storage/index/index_builder.h"
 #include "storage/write_ahead_log/log_io.h"
-#include "storage/recovery/replication_log_provider.h"
 
 namespace terrier::storage {
 
@@ -52,6 +51,10 @@ void RecoveryManager::RecoverFromLogs() {
 
         // Process any deferred transactions that are safe to execute
         recovered_txns_ += ProcessDeferredTransactions(commit_record->OldestActiveTxn());
+
+        if (IsAsynchronousReplication()) {
+          raw_commit_time_[log_record->TxnBegin()] = commit_record->RawCommitTime();
+        }
 
         // Clean up the log record
         deferred_action_manager_->RegisterDeferredAction([=] { delete[] reinterpret_cast<byte *>(log_record); });
@@ -139,12 +142,20 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
     ProcessCommittedTransaction(*it);
     committed_txns_.push_back(*it);
     txns_processed++;
+
+    if (IsAsynchronousReplication()) {
+      auto search = raw_commit_time_.find(*it);
+      TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
+      auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second).count();
+      STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", *it, async_replication_delay_ns)
+      raw_commit_time_.erase(search);
+    }
   }
 
   // If we actually processed some txns, remove them from the set, and if replication enabled, notify master
   if (txns_processed > 0) {
     deferred_txns_.erase(deferred_txns_.begin(), upper_bound_it);
-    if (io_wrapper_ != DISABLED) {
+    if (IsSynchronousReplication()) {
       network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
       packet_writer.WriteCommitTimestampsCommand(committed_txns_);
       committed_txns_.clear();
