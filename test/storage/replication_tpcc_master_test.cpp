@@ -101,7 +101,10 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     unlink(LOG_FILE_NAME);
 
     // If we're doing asynchronous replication, sync the NTP clock
-    if (!synchronous_replication_) system("sudo ntpdate ntp-1.ece.cmu.edu");
+    if (!synchronous_replication_) {
+      system("sudo ntpdate ntp-1.ece.cmu.edu");
+      TEST_LOG_INFO("Synched NTP clock")
+    }
   }
 
   void TearDown() override {
@@ -130,7 +133,6 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
                                          log_persist_interval_, log_persist_threshold_, replica_ip_address_, replication_port_, synchronous_replication_,
                                          &buffer_pool_, common::ManagedPointer(master_thread_registry_));
->>>>>>> Stashed changes
 
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;

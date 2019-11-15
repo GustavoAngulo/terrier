@@ -33,7 +33,7 @@ namespace terrier::storage {
 
 class ReplicationTPCCReplicaTest : public TerrierTest {
  protected:
-  const uint8_t master_wait_time_ = 3;
+  const uint8_t master_wait_time_ = 5;
 
   // Settings for log manager
   const uint64_t num_log_buffers_ = 10000;
@@ -128,7 +128,10 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     unlink(LOG_FILE_NAME);
 
     // If we're doing asynchronous replication, sync the NTP clock
-    if (!synchronous_replication_) system("sudo ntpdate ntp-1.ece.cmu.edu");
+    if (!synchronous_replication_) {
+      system("sudo ntpdate ntp-1.ece.cmu.edu");
+      TEST_LOG_INFO("Synched NTP clock")
+    }
   }
 
   void TearDown() override {
