@@ -102,7 +102,8 @@ class ReplicationTPCCMasterTest : public TerrierTest {
 
     // If we're doing asynchronous replication, sync the NTP clock
     if (!synchronous_replication_) {
-      system("sudo ntpdate ntp-1.ece.cmu.edu");
+      auto status = system("sudo ntpdate ntp-1.ece.cmu.edu");
+      TERRIER_ASSERT(status >= 0, "NTP sync failed");
       TEST_LOG_INFO("Synched NTP clock")
     }
   }
