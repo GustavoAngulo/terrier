@@ -38,7 +38,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const std::chrono::microseconds log_serialization_interval_{10};
   const std::chrono::milliseconds log_persist_interval_{20};
   const uint64_t log_persist_threshold_ = (1 << 20);  // 1MB
-  const std::string ip_address_ = "127.0.0.1";
+  const std::string replica_ip_address_ = "172.19.146.6";
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
 
@@ -50,7 +50,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const std::chrono::seconds replication_timeout_{10};
 
   // Settings for TPCC
-  const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
+  const int8_t num_threads_ = 6;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
   const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
   tpcc::TransactionWeights txn_weights_;                   // default txn_weights. See definition for values
@@ -128,7 +128,9 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     TEST_LOG_INFO("REMINDER: Replica should be brought up first")
     master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
     master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
-                                         log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_, synchronous_replication_, &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+                                         log_persist_interval_, log_persist_threshold_, replica_ip_address_, replication_port_, synchronous_replication_,
+                                         &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+>>>>>>> Stashed changes
 
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;
