@@ -39,7 +39,7 @@ DBMain::DBMain(std::unordered_map<settings::Param, settings::ParamInfo> &&param_
       std::chrono::milliseconds{settings_manager_->GetInt(settings::Param::log_persist_interval)},
       settings_manager_->GetInt(settings::Param::log_persist_threshold),
       // TODO(Gus): Replace with settings manager fields
-      "", 0, buffer_segment_pool_, common::ManagedPointer(thread_registry_));
+      "", 0, false, buffer_segment_pool_, common::ManagedPointer(thread_registry_));
   log_manager_->Start();
 
   timestamp_manager_ = new transaction::TimestampManager;

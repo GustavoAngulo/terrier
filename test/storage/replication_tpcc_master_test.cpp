@@ -40,6 +40,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const uint64_t log_persist_threshold_ = (1 << 20);  // 1MB
   const std::string ip_address_ = "127.0.0.1";
   const uint16_t replication_port_ = 9022;
+  const bool synchronous_replication_ = false;
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -98,6 +99,9 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     TerrierTest::SetUp();
     // Unlink log file incase one exists from previous test iteration
     unlink(LOG_FILE_NAME);
+
+    // If we're doing asynchronous replication, sync the NTP clock
+    if (!synchronous_replication_) system("sudo ntpdate ntp-1.ece.cmu.edu");
   }
 
   void TearDown() override {
@@ -124,8 +128,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     TEST_LOG_INFO("REMINDER: Replica should be brought up first")
     master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
     master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
-                                         log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_,
-                                         &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+                                         log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_, synchronous_replication_, &buffer_pool_, common::ManagedPointer(master_thread_registry_));
 
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;

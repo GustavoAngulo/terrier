@@ -13,8 +13,10 @@ namespace terrier::storage {
  */
 class ReplicationLogProvider final : public AbstractLogProvider {
  public:
-  ReplicationLogProvider(std::chrono::seconds replication_timeout)
-      : replication_active_(true), replication_timeout_(replication_timeout) {}
+  ReplicationLogProvider(std::chrono::seconds replication_timeout, bool synchronous_replication)
+      : replication_active_(true),
+        replication_timeout_(replication_timeout),
+        synchronous_replication_(synchronous_replication) {}
 
   /**
    * Notifies the log provider that replication is ending
@@ -45,6 +47,8 @@ class ReplicationLogProvider final : public AbstractLogProvider {
     return (curr_buffer_ != nullptr && curr_buffer_->HasMore()) || !arrived_buffer_queue_.empty();
   };
 
+  bool IsSynchronousReplication() const { return synchronous_replication_; }
+
  private:
   // TODO(Gus): Remove
   friend class ReplicationTests;
@@ -53,6 +57,9 @@ class ReplicationLogProvider final : public AbstractLogProvider {
 
   // TODO(Gus): Put in settings manager
   std::chrono::seconds replication_timeout_;
+
+  // True if synchronous replication is enabled
+  bool synchronous_replication_;
 
   // Current buffer to read logs from
   std::unique_ptr<network::ReadBuffer> curr_buffer_ = nullptr;

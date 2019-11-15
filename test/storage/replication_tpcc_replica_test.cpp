@@ -42,6 +42,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const uint64_t log_persist_threshold_ = (1 << 20);  // 1MB
   const std::string ip_address_ = "127.0.0.1";
   const uint16_t replication_port_ = 9022;
+  const bool synchronous_replication_ = false;
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -125,6 +126,9 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     TerrierTest::SetUp();
     // Unlink log file incase one exists from previous test iteration
     unlink(LOG_FILE_NAME);
+
+    // If we're doing asynchronous replication, sync the NTP clock
+    if (!synchronous_replication_) system("sudo ntpdate ntp-1.ece.cmu.edu");
   }
 
   void TearDown() override {
@@ -150,7 +154,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_gc_thread_ = new storage::GarbageCollectorThread(replica_gc_, gc_period_);  // Enable background GC
 
     // Bring up recovery manager
-    replica_log_provider_ = new ReplicationLogProvider(replication_timeout_);
+    replica_log_provider_ = new ReplicationLogProvider(replication_timeout_, synchronous_replication_);
     replica_recovery_manager_ = new RecoveryManager(common::ManagedPointer<AbstractLogProvider>(replica_log_provider_),
                                                     common::ManagedPointer(replica_catalog_), replica_txn_manager_,
                                                     replica_deferred_action_manager_,

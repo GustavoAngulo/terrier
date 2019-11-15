@@ -71,7 +71,8 @@ class LogManager : public common::DedicatedThreadOwner {
                   (named = PERSIST_INTERVAL) std::chrono::milliseconds persist_interval,
                   (named = PERSIST_THRESHOLD) uint64_t persist_threshold,
                   (named = IP_ADDRESS) const std::string &ip_address,
-                  (named = REPLICATION_PORT) uint16_t replication_port, RecordBufferSegmentPool *buffer_pool,
+                  (named = REPLICATION_PORT) uint16_t replication_port, bool synchronous_replication,
+                  RecordBufferSegmentPool *buffer_pool,
                   common::ManagedPointer<terrier::common::DedicatedThreadRegistry> thread_registry)
       : DedicatedThreadOwner(thread_registry),
         run_log_manager_(false),
@@ -82,7 +83,8 @@ class LogManager : public common::DedicatedThreadOwner {
         persist_interval_(persist_interval),
         persist_threshold_(persist_threshold),
         ip_address_(ip_address),
-        replication_port_(replication_port) {}
+        replication_port_(replication_port),
+        synchronous_replication_(synchronous_replication) {}
 
   /**
    * Starts log manager. Does the following in order:
@@ -205,6 +207,8 @@ class LogManager : public common::DedicatedThreadOwner {
   const std::string ip_address_;
   // If replication is enabled, port number to use for log shipping
   const uint16_t replication_port_;
+  // If synchronous relication is enabled
+  const bool synchronous_replication_;
 
   /**
    * If the central registry wants to removes our thread used for the disk log consumer task, we only allow removal if

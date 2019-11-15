@@ -20,12 +20,14 @@ void ReplicationLogConsumerTask::Terminate() {
 }
 
 void ReplicationLogConsumerTask::NotifyOfCommits(const std::vector<terrier::transaction::timestamp_t> &commited_txns) {
+  TERRIER_ASSERT(synchronous_replication_,
+                 "We should only be receiving these messages if synchronous replication is enabled");
   auto now = std::chrono::high_resolution_clock::now();
   for (auto txn : commited_txns) {
     auto search = raw_commit_ts_.Find(txn);
     if (search == raw_commit_ts_.end()) continue;
     auto replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - search->second).count();
-    STORAGE_LOG_INFO("Txn {} committed with delay {} ns", txn, replication_delay_ns)
+    STORAGE_LOG_INFO("Txn {} committed with synchronous delay {} ns", txn, replication_delay_ns)
   }
 }
 
@@ -57,8 +59,10 @@ void ReplicationLogConsumerTask::SendLogsOverNetwork() {
     buffer->Reset();
     empty_buffer_queue_->Enqueue(buffer);
 
-    for (const RawCommitTime &commit_ts : logs.second) {
-      raw_commit_ts_.Insert(commit_ts.first, commit_ts.second);
+    if (synchronous_replication_) {
+      for (const RawCommitTime &commit_ts : logs.second) {
+        raw_commit_ts_.Insert(commit_ts.first, commit_ts.second);
+      }
     }
   }
   packet_writer.EndReplicationCommand();
