@@ -24,7 +24,8 @@ void LogManager::Start() {
   // If an IP address was provided, we register a replication task
   if (!ip_address_.empty()) {
     replication_log_consumer_task_ = thread_registry_->RegisterDedicatedThread<ReplicationLogConsumerTask>(
-        this /* requester */, ip_address_, synchronous_replication_, replication_port_, &empty_buffer_queue_, &replication_consumer_queue_);
+        this /* requester */, ip_address_, replication_port_, synchronous_replication_, &empty_buffer_queue_,
+        &replication_consumer_queue_);
   }
 
   // Register LogSerializerTask

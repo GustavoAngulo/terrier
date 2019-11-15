@@ -49,12 +49,12 @@ void RecoveryManager::RecoverFromLogs() {
           buffered_changes_map_.erase(log_record->TxnBegin());
         }
 
-        // Process any deferred transactions that are safe to execute
-        recovered_txns_ += ProcessDeferredTransactions(commit_record->OldestActiveTxn());
-
         if (IsAsynchronousReplication()) {
           raw_commit_time_[log_record->TxnBegin()] = commit_record->RawCommitTime();
         }
+
+        // Process any deferred transactions that are safe to execute
+        recovered_txns_ += ProcessDeferredTransactions(commit_record->OldestActiveTxn());
 
         // Clean up the log record
         deferred_action_manager_->RegisterDeferredAction([=] { delete[] reinterpret_cast<byte *>(log_record); });
@@ -139,15 +139,16 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
   auto upper_bound_it = deferred_txns_.upper_bound(upper_bound_ts);
 
   for (auto it = deferred_txns_.begin(); it != upper_bound_it; it++) {
-    ProcessCommittedTransaction(*it);
-    committed_txns_.push_back(*it);
+    auto txn_id = *it;
+    ProcessCommittedTransaction(txn_id);
+    committed_txns_.push_back(txn_id);
     txns_processed++;
 
     if (IsAsynchronousReplication()) {
-      auto search = raw_commit_time_.find(*it);
+      auto search = raw_commit_time_.find(txn_id);
       TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
       auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second).count();
-      STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", *it, async_replication_delay_ns)
+      STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id, async_replication_delay_ns)
       raw_commit_time_.erase(search);
     }
   }

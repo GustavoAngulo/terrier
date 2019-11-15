@@ -33,7 +33,7 @@ namespace terrier::storage {
 
 class ReplicationTPCCReplicaTest : public TerrierTest {
  protected:
-  const uint8_t master_wait_time_ = 5;
+  const uint8_t master_wait_time_ = 10;
 
   // Settings for log manager
   const uint64_t num_log_buffers_ = 10000;
@@ -51,12 +51,6 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   // Settings for replication
   const std::chrono::seconds replication_timeout_{10};
 
-  // Settings for TPCC
-  const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
-  // benchmark. Sometimes called scale factor
-  const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
-  tpcc::TransactionWeights txn_weights_;                   // default txn_weights. See definition for values
-
   // General settings
   std::default_random_engine generator_;
   const uint64_t blockstore_size_limit_ = 1000;
@@ -65,7 +59,6 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const uint64_t buffersegment_reuse_limit_ = 1000000;
   storage::BlockStore block_store_{blockstore_size_limit_, blockstore_reuse_limit_};
   storage::RecordBufferSegmentPool buffer_pool_{buffersegment_size_limit_, buffersegment_reuse_limit_};
-  common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
   // Settings for gc
   const std::chrono::milliseconds gc_period_{10};
@@ -74,28 +67,6 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const std::chrono::milliseconds metrics_period_{100};
   const std::vector<metrics::MetricsComponent> metrics_components_ = {metrics::MetricsComponent::LOGGING,
                                                                       metrics::MetricsComponent::TRANSACTION};
-
-  // Master node's components (prefixed with "master_") in order of initialization
-  // We need:
-  //  1. ThreadRegistry
-  //  2. LogManager
-  //  3. TxnManager
-  //  4. Catalog
-  //  4. GC
-  metrics::MetricsThread *master_metrics_thread_ = DISABLED;
-  common::DedicatedThreadRegistry *master_thread_registry_;
-  LogManager *master_log_manager_;
-  transaction::TimestampManager *master_timestamp_manager_;
-  transaction::DeferredActionManager *master_deferred_action_manager_;
-  transaction::TransactionManager *master_txn_manager_;
-  catalog::Catalog *master_catalog_;
-  storage::GarbageCollector *master_gc_;
-  storage::GarbageCollectorThread *master_gc_thread_;
-  network::ITPCommandFactory *master_itp_command_factory_;
-  network::ITPProtocolInterpreter::Provider *master_itp_protocol_provider_;
-  network::ConnectionHandleFactory *master_connection_handle_factory_;
-  trafficcop::TrafficCop *master_tcop_;
-  network::TerrierServer *master_server_;
 
   // Replica node's components (prefixed with "replica_") in order of initialization
   //  1. Thread Registry
@@ -191,7 +162,6 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     TEST_LOG_INFO("Connected to master!")
     replica_recovery_manager_->StartRecovery();
 
-    thread_pool_.Startup();
   }
 
   void InternalTearDown() {
