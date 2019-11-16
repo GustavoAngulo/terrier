@@ -22,11 +22,12 @@ void ReplicationLogConsumerTask::Terminate() {
 void ReplicationLogConsumerTask::NotifyOfCommits(const std::vector<terrier::transaction::timestamp_t> &commited_txns) {
   TERRIER_ASSERT(synchronous_replication_,
                  "We should only be receiving these messages if synchronous replication is enabled");
-  auto now = std::chrono::high_resolution_clock::now();
   for (auto txn : commited_txns) {
     auto search = raw_commit_ts_.Find(txn);
     if (search == raw_commit_ts_.end()) continue;
-    auto replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - search->second).count();
+    auto replication_delay_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second)
+            .count();
     STORAGE_LOG_INFO("Txn {} committed with synchronous delay {} ns", txn, replication_delay_ns)
   }
 }
