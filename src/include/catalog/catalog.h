@@ -114,6 +114,8 @@ class Catalog {
   storage::BlockStore *catalog_block_store_;
   std::atomic<db_oid_t> next_oid_;
 
+  std::unordered_map<db_oid_t, common::ManagedPointer<DatabaseCatalog>> database_catalog_cache_;
+
   storage::SqlTable *databases_;
   storage::index::Index *databases_name_index_;
   storage::index::Index *databases_oid_index_;

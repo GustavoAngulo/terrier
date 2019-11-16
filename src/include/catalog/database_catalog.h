@@ -278,6 +278,13 @@ class DatabaseCatalog {
   template <typename Column, typename ClassOid>
   bool DeleteColumns(transaction::TransactionContext *txn, ClassOid class_oid);
 
+  std::unordered_map<table_oid_t, Schema *> table_schema_cache_;
+  std::unordered_map<index_oid_t, IndexSchema *> index_schema_cache_;
+
+  std::unordered_map<table_oid_t, common::ManagedPointer<storage::SqlTable>> table_cache_;
+  std::unordered_map<index_oid_t, common::ManagedPointer<storage::index::Index>> index_cache_;
+  std::unordered_map<table_oid_t, std::vector<index_oid_t>> index_oid_cache_;
+
   storage::SqlTable *namespaces_;
   storage::index::Index *namespaces_oid_index_;
   storage::index::Index *namespaces_name_index_;

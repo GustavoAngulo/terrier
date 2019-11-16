@@ -121,6 +121,7 @@ bool Catalog::DeleteDatabase(transaction::TransactionContext *const txn, const d
       [=, del_action{std::move(del_action)}](transaction::DeferredActionManager *deferred_action_manager) {
         deferred_action_manager->RegisterDeferredAction(del_action);
       });
+  database_catalog_cache_.erase(database);
   return true;
 }
 
@@ -167,6 +168,9 @@ db_oid_t Catalog::GetDatabaseOid(transaction::TransactionContext *const txn, con
 
 common::ManagedPointer<DatabaseCatalog> Catalog::GetDatabaseCatalog(transaction::TransactionContext *const txn,
                                                                     const db_oid_t database) {
+
+  if (database_catalog_cache_.find(database) != database_catalog_cache_.end()) return database_catalog_cache_[database];
+
   const auto oid_pri = databases_name_index_->GetProjectedRowInitializer();
 
   // Name is a larger projected row (16-byte key vs 4-byte key), sow we can reuse
@@ -189,6 +193,8 @@ common::ManagedPointer<DatabaseCatalog> Catalog::GetDatabaseCatalog(transaction:
 
   const auto dbc = *(reinterpret_cast<DatabaseCatalog **>(pr->AccessForceNotNull(0)));
   delete[] buffer;
+
+  database_catalog_cache_[database] = common::ManagedPointer(dbc);
   return common::ManagedPointer(dbc);
 }
 

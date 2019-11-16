@@ -48,7 +48,7 @@ class RecoveryBenchmark : public benchmark::Fixture {
       thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
       storage::LogManager log_manager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
                                       log_persist_interval_, log_persist_threshold_, "" /* replication disabled */, 0,
-                                      &buffer_pool_, common::ManagedPointer(thread_registry_));
+                                      false, &buffer_pool_, common::ManagedPointer(thread_registry_));
       log_manager.Start();
 
       transaction::TimestampManager timestamp_manager;
@@ -163,7 +163,7 @@ BENCHMARK_DEFINE_F(RecoveryBenchmark, IndexRecovery)(benchmark::State &state) {
     // Initialize table and run workload with logging enabled
     thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
     storage::LogManager log_manager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_,
-                                    log_persist_threshold_, "" /* replication disabled */, 0, &buffer_pool_,
+                                    log_persist_threshold_, "" /* replication disabled */, 0, false, &buffer_pool_,
                                     common::ManagedPointer(thread_registry_));
     log_manager.Start();
 
