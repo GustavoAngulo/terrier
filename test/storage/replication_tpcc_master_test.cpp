@@ -41,6 +41,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const std::string replica_ip_address_ = "172.19.146.6";
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
+  const bool master_metrics_enabled_ = false;
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -53,7 +54,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const int8_t num_threads_ = 6;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
   const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
-  tpcc::TransactionWeights txn_weights_;                   // default txn_weights. See definition for values
+  tpcc::TransactionWeights txn_weights_;                     // default txn_weights. See definition for values
 
   // General settings
   std::default_random_engine generator_;
@@ -114,26 +115,25 @@ class ReplicationTPCCMasterTest : public TerrierTest {
     TerrierTest::TearDown();
   }
 
-  void InternalSetUp(const bool replica_logging_enabled, const bool master_metrics_enabled,
-                     const bool replica_metrics_enabled) {
-    // Bring up components for master node
-    //    if (master_metrics_enabled) {
-    //      master_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
-    //      for (const auto component : metrics_components_) {
-    //        master_metrics_thread_->GetMetricsManager().EnableMetric(component);
-    //      }
-    //      master_thread_registry_ =
-    //          new
-    //          common::DedicatedThreadRegistry(common::ManagedPointer(&(master_metrics_thread_->GetMetricsManager())));
-    //    } else {
-    //      master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
-    //    }
-
+  void InternalSetUp() {
     TEST_LOG_INFO("REMINDER: Replica should be brought up first")
-    master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
-    master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
-                                         log_persist_interval_, log_persist_threshold_, replica_ip_address_, replication_port_, synchronous_replication_,
-                                         &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+    // Bring up components for master node
+    if (master_metrics_enabled_) {
+      master_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        master_metrics_thread_->GetMetricsManager().EnableMetric(component);
+      }
+      master_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(master_metrics_thread_->GetMetricsManager())));
+    } else {
+      master_metrics_thread_ = DISABLED;
+      master_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    }
+
+    master_log_manager_ =
+        new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_,
+                       log_persist_threshold_, replica_ip_address_, replication_port_, synchronous_replication_,
+                       &buffer_pool_, common::ManagedPointer(master_thread_registry_));
 
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;
@@ -199,7 +199,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
 
     // NOLINTNEXTLINE
     unlink(LOG_FILE_NAME);
-    InternalSetUp(false, false, false);
+    InternalSetUp();
     // one TPCC worker = one TPCC terminal = one thread
     std::vector<tpcc::Worker> workers;
     workers.reserve(num_threads_);
@@ -233,6 +233,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
       // run the TPCC workload to completion
       for (int8_t i = 0; i < num_threads_; i++) {
         thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
+          master_metrics_thread_->GetMetricsManager().RegisterThread();
           Workload(i, tpcc_db, master_txn_manager_, precomputed_args, &workers);
         });
       }

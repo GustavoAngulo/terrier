@@ -43,6 +43,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const std::string master_ip_address_ = "172.19.146.5";
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
+  const bool replica_metrics_enabled_ = false;
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -112,10 +113,18 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     TerrierTest::TearDown();
   }
 
-  void InternalSetUp(const bool replica_logging_enabled, const bool master_metrics_enabled,
-                     const bool replica_metrics_enabled) {
-    // We first bring up the replica, then the master node
-    replica_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+  void InternalSetUp() {
+    if (replica_metrics_enabled_) {
+      replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
+      for (const auto component : metrics_components_) {
+        replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
+      }
+      replica_thread_registry_ =
+          new common::DedicatedThreadRegistry(common::ManagedPointer(&(replica_metrics_thread_->GetMetricsManager())));
+    } else {
+      replica_metrics_thread_ = DISABLED;
+      replica_thread_registry_ = new common::DedicatedThreadRegistry(DISABLED);
+    }
 
     replica_timestamp_manager_ = new transaction::TimestampManager;
     replica_deferred_action_manager_ = new transaction::DeferredActionManager(replica_timestamp_manager_);
@@ -161,7 +170,6 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_recovery_manager_->ConnectToMaster(master_ip_address_, replication_port_ * 2);
     TEST_LOG_INFO("Connected to master!")
     replica_recovery_manager_->StartRecovery();
-
   }
 
   void InternalTearDown() {
@@ -193,7 +201,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   void RunTPCCReplica() {
     // NOLINTNEXTLINE
     unlink(LOG_FILE_NAME);
-    InternalSetUp(false, false, false);
+    InternalSetUp();
 
     TEST_LOG_INFO("Entering permanent loop")
     while (true) std::this_thread::yield();
