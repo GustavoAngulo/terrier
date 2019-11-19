@@ -44,6 +44,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
   const bool replica_metrics_enabled_ = false;
+  const bool replica_logging_enabled_ = false;
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -81,7 +82,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   common::DedicatedThreadRegistry *replica_thread_registry_;
   transaction::TimestampManager *replica_timestamp_manager_;
   transaction::DeferredActionManager *replica_deferred_action_manager_;
-  LogManager *replica_log_manager_;
+  LogManager *replica_log_manager_ = DISABLED;
   transaction::TransactionManager *replica_txn_manager_;
   catalog::Catalog *replica_catalog_;
   storage::GarbageCollector *replica_gc_;
@@ -129,7 +130,15 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_timestamp_manager_ = new transaction::TimestampManager;
     replica_deferred_action_manager_ = new transaction::DeferredActionManager(replica_timestamp_manager_);
 
-    replica_log_manager_ = DISABLED;
+    if (replica_logging_enabled_) {
+      replica_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
+                                            log_persist_interval_, log_persist_threshold_, "", 0, false, &buffer_pool_,
+                                            common::ManagedPointer(replica_thread_registry_));
+
+      replica_log_manager_->Start();
+    } else {
+      replica_log_manager_ = DISABLED;
+    }
     replica_txn_manager_ = new transaction::TransactionManager(
         replica_timestamp_manager_, replica_deferred_action_manager_, &buffer_pool_, true, replica_log_manager_);
     replica_catalog_ = new catalog::Catalog(replica_txn_manager_, &block_store_);
@@ -179,6 +188,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
+    if (replica_log_manager_ != DISABLED) replica_log_manager_->PersistAndStop();
 
     replica_server_->StopServer();
     delete replica_server_;
