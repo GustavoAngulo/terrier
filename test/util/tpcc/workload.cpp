@@ -2,7 +2,7 @@
 #include <common/scoped_timer.h>
 #include <vector>
 
-#define RATE 10000
+#define RATE 2500
 
 #define INTERVAL std::chrono::milliseconds(1000)
 

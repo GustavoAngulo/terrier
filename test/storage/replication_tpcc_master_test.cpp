@@ -233,7 +233,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
       // run the TPCC workload to completion
       for (int8_t i = 0; i < num_threads_; i++) {
         thread_pool_.SubmitTask([i, tpcc_db, precomputed_args, &workers, this] {
-          master_metrics_thread_->GetMetricsManager().RegisterThread();
+          if (master_metrics_thread_ != DISABLED) master_metrics_thread_->GetMetricsManager().RegisterThread();
           Workload(i, tpcc_db, master_txn_manager_, precomputed_args, &workers);
         });
       }
