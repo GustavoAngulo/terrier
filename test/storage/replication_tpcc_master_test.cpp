@@ -51,7 +51,7 @@ class ReplicationTPCCMasterTest : public TerrierTest {
   const std::chrono::seconds replication_timeout_{10};
 
   // Settings for TPCC
-  const int8_t num_threads_ = 6;  // defines the number of terminals (workers running txns) and warehouses for the
+  const int8_t num_threads_ = 4;  // defines the number of terminals (workers running txns) and warehouses for the
   // benchmark. Sometimes called scale factor
   const uint32_t num_precomputed_txns_per_worker_ = 100000;  // Number of txns to run per terminal (worker thread)
   tpcc::TransactionWeights txn_weights_;                     // default txn_weights. See definition for values
