@@ -82,7 +82,7 @@ class WriteAheadLoggingTests : public TerrierTest {
       // is_read_only argument is set to false, because we do not write out a commit record for a transaction if it is
       // not read-only.
       return storage::CommitRecord::Initialize(buf, txn_begin, txn_commit,
-                                               std::chrono::high_resolution_clock::time_point::min(), nullptr, nullptr,
+                                               std::chrono::steady_clock::time_point::min(), nullptr, nullptr,
                                                oldest_active_txn, false, nullptr, nullptr);
     }
 

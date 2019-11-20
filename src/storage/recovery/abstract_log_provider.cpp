@@ -18,7 +18,7 @@ std::pair<LogRecord *, std::vector<byte *>> AbstractLogProvider::ReadNextRecord(
     case (storage::LogRecordType::COMMIT): {
       auto txn_commit = ReadValue<transaction::timestamp_t>();
       auto oldest_active_txn = ReadValue<transaction::timestamp_t>();
-      auto raw_commit_time = ReadValue<std::chrono::high_resolution_clock::time_point>();
+      auto raw_commit_time = ReadValue<std::chrono::steady_clock::time_point>();
       TERRIER_ASSERT(oldest_active_txn != transaction::INVALID_TXN_TIMESTAMP,
                      "INVALID_TXN_TIMESTAMP indicates this was a read only txn, which should "
                      "never have been flushed to disk/network");
