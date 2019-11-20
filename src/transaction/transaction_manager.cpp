@@ -36,8 +36,8 @@ void TransactionManager::LogCommit(TransactionContext *const txn, const timestam
     // Here we will manually add a commit record and flush the buffer to ensure the logger
     // sees this record.
     byte *const commit_record = txn->redo_buffer_.NewEntry(storage::CommitRecord::Size());
-    storage::CommitRecord::Initialize(commit_record, txn->StartTime(), commit_time, std::chrono::steady_clock::now(),
-                                      commit_callback, commit_callback_arg, oldest_active_txn, txn->IsReadOnly() && !txn->IsGCTxn(), txn,
+    storage::CommitRecord::Initialize(commit_record, txn->StartTime(), commit_time, std::chrono::high_resolution_clock::now(), commit_callback,
+                                      commit_callback_arg, oldest_active_txn, txn->IsReadOnly() && !txn->IsGCTxn(), txn,
                                       timestamp_manager_);
 	/*
     if (!txn->IsGCTxn() && !txn->IsReadOnly()) {
