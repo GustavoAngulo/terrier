@@ -26,7 +26,8 @@ void ReplicationLogConsumerTask::NotifyOfCommits(const std::vector<terrier::tran
     auto search = raw_commit_ts_.Find(txn);
     if (search == raw_commit_ts_.end()) continue;
     auto replication_delay_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - search->second).count();
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second)
+            .count();
     STORAGE_LOG_INFO("Txn {} committed with synchronous delay {} ns", txn, replication_delay_ns)
   }
 }

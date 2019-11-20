@@ -291,7 +291,7 @@ class CommitRecord {
   // TODO(Tianyu): txn should contain a lot of the information here. Maybe we can simplify the function.
   // Note that however when reading log records back in we will not have a proper transaction.
   static LogRecord *Initialize(byte *const head, const transaction::timestamp_t txn_begin,
-                               const transaction::timestamp_t txn_commit, std::chrono::steady_clock::time_point raw_commit_time,
+                               const transaction::timestamp_t txn_commit, std::chrono::high_resolution_clock::time_point raw_commit_time,
                                transaction::callback_fn commit_callback,
                                void *commit_callback_arg, const transaction::timestamp_t oldest_active_txn,
                                const bool is_read_only, transaction::TransactionContext *const txn,
@@ -314,7 +314,7 @@ class CommitRecord {
    */
   transaction::timestamp_t CommitTime() const { return txn_commit_; }
 
-  std::chrono::steady_clock::time_point RawCommitTime() const { return raw_commit_time_; }
+  std::chrono::high_resolution_clock::time_point RawCommitTime() const { return raw_commit_time_; }
 
   /**
    * @return the start time of the oldest active transaction at the time that this txn committed
@@ -348,7 +348,7 @@ class CommitRecord {
 
  private:
   transaction::timestamp_t txn_commit_;
-  std::chrono::steady_clock::time_point raw_commit_time_;
+  std::chrono::high_resolution_clock::time_point raw_commit_time_;
   transaction::callback_fn commit_callback_;
   void *commit_callback_arg_;
   transaction::timestamp_t oldest_active_txn_;

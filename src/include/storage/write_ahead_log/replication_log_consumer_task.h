@@ -61,7 +61,7 @@ class ReplicationLogConsumerTask final : public LogConsumerTask {
   std::condition_variable replication_log_sender_cv_;
 
   // Used to compute replication delay
-  common::ConcurrentMap<transaction::timestamp_t, std::chrono::steady_clock::time_point> raw_commit_ts_;
+  common::ConcurrentMap<transaction::timestamp_t, std::chrono::high_resolution_clock::time_point> raw_commit_ts_;
 
   /**
    * @brief Main task loop.

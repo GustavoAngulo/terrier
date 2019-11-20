@@ -148,7 +148,7 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   // lead to issues if we don't execute transactions in complete serial order.
   std::set<transaction::timestamp_t> deferred_txns_;
 
-  std::unordered_map<transaction::timestamp_t, std::chrono::steady_clock::time_point> raw_commit_time_;
+  std::unordered_map<transaction::timestamp_t, std::chrono::high_resolution_clock::time_point> raw_commit_time_;
 
   // Used during recovery from log. Maps a the txn id from the persisted txn to its changes we have buffered. We buffer
   // changes until commit time. This ensures serializability, and allows us to skip changes from aborted txns.
