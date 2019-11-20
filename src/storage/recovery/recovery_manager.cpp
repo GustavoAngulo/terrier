@@ -174,9 +174,8 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
       for (auto txn_id : committed_txns_) {
         auto search = raw_commit_time_.find(txn_id);
         TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
-        auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                              std::chrono::high_resolution_clock::now() - search->second)
-                                              .count();
+        auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - search->second)
+                .count();
         STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id, async_replication_delay_ns)
         raw_commit_time_.erase(search);
       }
