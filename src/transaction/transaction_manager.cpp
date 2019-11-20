@@ -37,8 +37,8 @@ void TransactionManager::LogCommit(TransactionContext *const txn, const timestam
     // sees this record.
     byte *const commit_record = txn->redo_buffer_.NewEntry(storage::CommitRecord::Size());
     storage::CommitRecord::Initialize(commit_record, txn->StartTime(), commit_time, std::chrono::steady_clock::now(),
-                                      commit_callback, commit_callback_arg, oldest_active_txn,
-                                      txn->IsReadOnly() && !txn->IsGCTxn(), txn, timestamp_manager_);
+                                      commit_callback, commit_callback_arg, oldest_active_txn, txn->IsReadOnly() && !txn->IsGCTxn(), txn,
+                                      timestamp_manager_);
 	/*
     if (!txn->IsGCTxn() && !txn->IsReadOnly()) {
       TXN_LOG_INFO("Txn {0} committed at {1}", txn->StartTime(),
