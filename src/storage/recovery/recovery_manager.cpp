@@ -141,32 +141,47 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
   for (auto it = deferred_txns_.begin(); it != upper_bound_it; it++) {
     auto txn_id = *it;
     ProcessCommittedTransaction(txn_id);
+    committed_txns_.push_back(txn_id);
     txns_processed++;
 
-    if (IsAsynchronousReplication()) {
-      auto search = raw_commit_time_.find(txn_id);
-      TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
-      auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second).count();
-      STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id, async_replication_delay_ns)
-      raw_commit_time_.erase(search);
-    }
-
-    if (IsSynchronousReplication()) {
-      network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
-      packet_writer.WriteCommitTimestampsCommand({txn_id});
-      io_wrapper_->FlushAllWrites();
-    }
+    //    if (IsAsynchronousReplication()) {
+    //      auto search = raw_commit_time_.find(txn_id);
+    //      TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
+    //      auto async_replication_delay_ns =
+    //      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() -
+    //      search->second).count(); STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id,
+    //      async_replication_delay_ns) raw_commit_time_.erase(search);
+    //    }
+    //
+    //    if (IsSynchronousReplication()) {
+    //      network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
+    //      packet_writer.WriteCommitTimestampsCommand({txn_id});
+    //      io_wrapper_->FlushAllWrites();
+    //    }
   }
 
   // If we actually processed some txns, remove them from the set, and if replication enabled, notify master
   if (txns_processed > 0) {
     deferred_txns_.erase(deferred_txns_.begin(), upper_bound_it);
-    //    if (IsSynchronousReplication()) {
-    //      network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
-    //      packet_writer.WriteCommitTimestampsCommand(committed_txns_);
-    //      committed_txns_.clear();
-    //      io_wrapper_->FlushAllWrites();
-    //    }
+    if (IsSynchronousReplication()) {
+      network::ITPPacketWriter packet_writer(io_wrapper_->GetWriteQueue());
+      packet_writer.WriteCommitTimestampsCommand(committed_txns_);
+      committed_txns_.clear();
+      io_wrapper_->FlushAllWrites();
+    }
+
+    if (IsAsynchronousReplication()) {
+      for (auto txn_id : committed_txns_) {
+        auto search = raw_commit_time_.find(txn_id);
+        TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
+        auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                              std::chrono::high_resolution_clock::now() - search->second)
+                                              .count();
+        STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id, async_replication_delay_ns)
+        raw_commit_time_.erase(search);
+      }
+      committed_txns_.clear();
+    }
   }
 
   if (deferred_txns_.empty() && io_wrapper_ != DISABLED && !log_provider_.CastManagedPointerTo<storage::ReplicationLogProvider>()->NonBlockingHasMoreRecords()) {
