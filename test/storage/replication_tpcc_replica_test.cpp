@@ -43,7 +43,11 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const std::string master_ip_address_ = "172.19.146.5";
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
-  const bool replica_metrics_enabled_ = false;
+  const bool replica_metrics_enabled_ = true;
+
+  // Settings for RecoveryManager
+  const std::chrono::milliseconds metrics_overhead_polling_interval_{100};
+  const std::chrono::milliseconds metrics_overhead_threshold_{50};
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -98,6 +102,8 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     TerrierTest::SetUp();
     // Unlink log file incase one exists from previous test iteration
     unlink(LOG_FILE_NAME);
+    for (const auto &file : metrics::LoggingMetricRawData::FILES) unlink(std::string(file).c_str());
+    for (const auto &file : metrics::TransactionMetricRawData::FILES) unlink(std::string(file).c_str());
 
     // If we're doing asynchronous replication, sync the NTP clock
     if (!synchronous_replication_) {
@@ -141,8 +147,9 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_log_provider_ = new ReplicationLogProvider(replication_timeout_, synchronous_replication_);
     replica_recovery_manager_ = new RecoveryManager(common::ManagedPointer<AbstractLogProvider>(replica_log_provider_),
                                                     common::ManagedPointer(replica_catalog_), replica_txn_manager_,
-                                                    replica_deferred_action_manager_,
-                                                    common::ManagedPointer(replica_thread_registry_), &block_store_);
+                                                    replica_deferred_action_manager_, common::ManagedPointer(replica_thread_registry_),
+        &block_store_, common::ManagedPointer(replica_metrics_thread_), metrics_overhead_polling_interval_,
+        metrics_overhead_threshold_);
 
     // Bring up network layer
     replica_itp_command_factory_ = new network::ITPCommandFactory;

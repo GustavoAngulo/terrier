@@ -41,6 +41,11 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
   const uint64_t log_persist_threshold_ = (1 << 20);  // 1MB
   const std::string ip_address_ = "127.0.0.1";
   const uint16_t replication_port_ = 9022;
+  const bool synchronous_replication_ = false;
+
+  // Settings for RecoveryManager
+  const std::chrono::milliseconds metrics_overhead_polling_interval_{100};
+  const std::chrono::milliseconds metrics_overhead_threshold_{50};
 
   // Settings for server
   uint32_t max_connections_ = 1;
@@ -124,6 +129,8 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
                      const bool replica_metrics_enabled) {
     // We first bring up the replica, then the master node
     if (replica_metrics_enabled) {
+      for (const auto &file : metrics::LoggingMetricRawData::FILES) unlink(std::string(file).c_str());
+      for (const auto &file : metrics::TransactionMetricRawData::FILES) unlink(std::string(file).c_str());
       replica_metrics_thread_ = new metrics::MetricsThread(metrics_period_);
       for (const auto component : metrics_components_) {
         replica_metrics_thread_->GetMetricsManager().EnableMetric(component);
@@ -139,8 +146,8 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
 
     if (replica_logging_enabled) {
       replica_log_manager_ = new storage::LogManager(
-          REPLICA_LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_,
-          log_persist_threshold_, "", 0, &buffer_pool_, common::ManagedPointer(replica_thread_registry_));
+          REPLICA_LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_, log_persist_interval_, log_persist_threshold_, "", 0, synchronous_replication_,
+                                  &buffer_pool_, common::ManagedPointer(replica_thread_registry_));
       replica_log_manager_->Start();
     } else {
       replica_log_manager_ = DISABLED;
@@ -154,11 +161,12 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     replica_gc_thread_ = new storage::GarbageCollectorThread(replica_gc_, gc_period_);  // Enable background GC
 
     // Bring up recovery manager
-    replica_log_provider_ = new ReplicationLogProvider(replication_timeout_);
+    replica_log_provider_ = new ReplicationLogProvider(replication_timeout_, synchronous_replication_);
     replica_recovery_manager_ = new RecoveryManager(common::ManagedPointer<AbstractLogProvider>(replica_log_provider_),
                                                     common::ManagedPointer(replica_catalog_), replica_txn_manager_,
-                                                    replica_deferred_action_manager_,
-                                                    common::ManagedPointer(replica_thread_registry_), &block_store_);
+                                                    replica_deferred_action_manager_, common::ManagedPointer(replica_thread_registry_),
+        &block_store_, common::ManagedPointer(replica_metrics_thread_), metrics_overhead_polling_interval_,
+        metrics_overhead_threshold_);
 
     // Bring up network layer
     replica_itp_command_factory_ = new network::ITPCommandFactory;
@@ -192,8 +200,8 @@ class ReplicationTPCCBenchmark : public benchmark::Fixture {
     }
 
     master_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
-                                         log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_,
-                                         &buffer_pool_, common::ManagedPointer(master_thread_registry_));
+                                         log_persist_interval_, log_persist_threshold_, ip_address_, replication_port_, synchronous_replication_, &buffer_pool_,
+                       common::ManagedPointer(master_thread_registry_));
 
     master_log_manager_->Start();
     master_timestamp_manager_ = new transaction::TimestampManager;
@@ -368,8 +376,7 @@ BENCHMARK_DEFINE_F(ReplicationTPCCBenchmark, BothMetrics)(benchmark::State &stat
   RunTPCC(true, true, true, storage::index::IndexType::BWTREE, &state);
 }
 
-// BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark,
-// NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
+BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, NoMetrics)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(5);
 BENCHMARK_REGISTER_F(ReplicationTPCCBenchmark, MasterMetrics)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()

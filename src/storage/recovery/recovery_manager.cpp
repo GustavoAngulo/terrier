@@ -147,9 +147,36 @@ uint32_t RecoveryManager::ProcessDeferredTransactions(terrier::transaction::time
     if (IsAsynchronousReplication()) {
       auto search = raw_commit_time_.find(txn_id);
       TERRIER_ASSERT(search != raw_commit_time_.end(), "Raw commit should have been added already");
-      auto async_replication_delay_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - search->second).count();
+      auto now = std::chrono::high_resolution_clock::now();
+      auto async_replication_delay_ns =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(now - search->second).count();
       STORAGE_LOG_INFO("Txn {} committed with asynchronous delay {} ns", txn_id, async_replication_delay_ns)
       raw_commit_time_.erase(search);
+
+      if (metrics_thread_ != DISABLED) {
+        curr_agg_delays_ += async_replication_delay_ns;
+        curr_num_delays_++;
+
+        // if the time since the last polling exceeds our polling interval, poll for the overhead of metrics
+        if (std::chrono::duration_cast<std::chrono::milliseconds>((now - last_metrics_overhead_poll_)) >
+            metrics_overhead_polling_interval_) {
+          auto avg_delay = std::chrono::nanoseconds(curr_agg_delays_ / curr_num_delays_);
+
+          STORAGE_LOG_INFO("Running delay: {}",
+                           std::chrono::duration_cast<std::chrono::milliseconds>(avg_delay).count())
+
+          // If metrics is enabled and our avg delay exceeds the threshold, disabled metrics
+          if (metrics_collection_enabled_ && (avg_delay > metrics_overhead_threshold_)) DisableMetricsCollection();
+
+          // If metrics is disabled and our avg delay is less than the threshold, enable metrics
+          if (!metrics_collection_enabled_ && (avg_delay <= metrics_overhead_threshold_)) EnableMetricsCollection();
+
+          // Reset polling metadata
+          curr_agg_delays_ = 0;
+          curr_num_delays_ = 0;
+          last_metrics_overhead_poll_ = now;
+        }
+      }
     }
   }
 

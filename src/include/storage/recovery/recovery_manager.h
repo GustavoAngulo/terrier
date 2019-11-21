@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -15,6 +16,7 @@
 #include "catalog/postgres/pg_index.h"
 #include "catalog/postgres/pg_namespace.h"
 #include "common/dedicated_thread_owner.h"
+#include "metrics/metrics_thread.h"
 #include "storage/recovery/abstract_log_provider.h"
 #include "storage/recovery/replication_log_provider.h"
 #include "storage/sql_table.h"
@@ -71,14 +73,23 @@ class RecoveryManager : public common::DedicatedThreadOwner {
                            transaction::TransactionManager *txn_manager,
                            transaction::DeferredActionManager *deferred_action_manager,
                            common::ManagedPointer<terrier::common::DedicatedThreadRegistry> thread_registry,
-                           BlockStore *store)
+                           BlockStore *store, common::ManagedPointer<metrics::MetricsThread> metrics_thread,
+                           std::chrono::milliseconds metrics_overhead_polling_interval,
+                           std::chrono::milliseconds metrics_overhead_threshold)
       : DedicatedThreadOwner(thread_registry),
         log_provider_(log_provider),
         catalog_(catalog),
         txn_manager_(txn_manager),
         deferred_action_manager_(deferred_action_manager),
         block_store_(store),
-        recovered_txns_(0) {
+        recovered_txns_(0),
+        metrics_thread_(metrics_thread),
+        metrics_collection_enabled_(metrics_thread != DISABLED),
+        curr_agg_delays_(0),
+        curr_num_delays_(0),
+        last_metrics_overhead_poll_(std::chrono::high_resolution_clock::now()),
+        metrics_overhead_polling_interval_(metrics_overhead_polling_interval),
+        metrics_overhead_threshold_(metrics_overhead_threshold) {
     // Initialize catalog_table_schemas_ map
     catalog_table_schemas_[catalog::postgres::CLASS_TABLE_OID] = catalog::postgres::Builder::GetClassTableSchema();
     catalog_table_schemas_[catalog::postgres::NAMESPACE_TABLE_OID] =
@@ -112,6 +123,26 @@ class RecoveryManager : public common::DedicatedThreadOwner {
 
   void ConnectToMaster(const std::string &ip_address, uint16_t port) {
     io_wrapper_ = std::make_unique<network::NetworkIoWrapper>(ip_address, port);
+  }
+
+  void EnableMetricsCollection() {
+    TERRIER_ASSERT(metrics_thread_ != DISABLED, "Metrics collection was never enabled");
+    TERRIER_ASSERT(!metrics_collection_enabled_, "Metrics is already enabled");
+    metrics_thread_->GetMetricsManager().EnableMetric(metrics::MetricsComponent::LOGGING);
+    metrics_thread_->GetMetricsManager().EnableMetric(metrics::MetricsComponent::TRANSACTION);
+    metrics_thread_->ResumeMetrics();
+    metrics_collection_enabled_ = true;
+    STORAGE_LOG_INFO("Metrics Enabled")
+  }
+
+  void DisableMetricsCollection() {
+    TERRIER_ASSERT(metrics_thread_ != DISABLED, "Metrics collection was never enabled");
+    TERRIER_ASSERT(metrics_collection_enabled_, "Metrics is already disabled");
+    metrics_thread_->PauseMetrics();
+    metrics_thread_->GetMetricsManager().DisableMetric(metrics::MetricsComponent::LOGGING);
+    metrics_thread_->GetMetricsManager().DisableMetric(metrics::MetricsComponent::TRANSACTION);
+    metrics_collection_enabled_ = false;
+    STORAGE_LOG_INFO("Metrics Disabled")
   }
 
  private:
@@ -169,6 +200,16 @@ class RecoveryManager : public common::DedicatedThreadOwner {
 
   std::vector<transaction::timestamp_t> committed_txns_;
 
+  // Dynamic metrics collection settings
+
+  common::ManagedPointer<metrics::MetricsThread> metrics_thread_;
+
+  bool metrics_collection_enabled_;
+  uint64_t curr_agg_delays_;
+  uint64_t curr_num_delays_;
+  std::chrono::time_point<std::chrono::high_resolution_clock> last_metrics_overhead_poll_;
+  std::chrono::milliseconds metrics_overhead_polling_interval_;
+  std::chrono::milliseconds metrics_overhead_threshold_;
 
   /**
    * Recovers the databases using the provided log provider
