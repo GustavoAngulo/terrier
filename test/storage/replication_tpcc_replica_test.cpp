@@ -44,6 +44,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const uint16_t replication_port_ = 9022;
   const bool synchronous_replication_ = false;
   const bool replica_metrics_enabled_ = true;
+  const bool replica_logging_enabled_ = true;
 
   // Settings for RecoveryManager
   const std::chrono::milliseconds metrics_overhead_polling_interval_{100};
@@ -135,7 +136,14 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_timestamp_manager_ = new transaction::TimestampManager;
     replica_deferred_action_manager_ = new transaction::DeferredActionManager(replica_timestamp_manager_);
 
-    replica_log_manager_ = DISABLED;
+    if (replica_logging_enabled_) {
+      replica_log_manager_ = new LogManager(LOG_FILE_NAME, num_log_buffers_, log_serialization_interval_,
+                                            log_persist_interval_, log_persist_threshold_, "", 0, false, &buffer_pool_,
+                                            common::ManagedPointer(replica_thread_registry_));
+      replica_log_manager_->Start();
+    } else {
+      replica_log_manager_ = DISABLED;
+    }
     replica_txn_manager_ = new transaction::TransactionManager(
         replica_timestamp_manager_, replica_deferred_action_manager_, &buffer_pool_, true, replica_log_manager_);
     replica_catalog_ = new catalog::Catalog(replica_txn_manager_, &block_store_);
@@ -185,6 +193,7 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
     replica_recovery_manager_->WaitForRecoveryToFinish();
     replica_catalog_->TearDown();
     delete replica_gc_thread_;
+    if (replica_logging_enabled_) replica_log_manager_->PersistAndStop();
     StorageTestUtil::FullyPerformGC(replica_gc_, DISABLED);
 
     replica_server_->StopServer();
