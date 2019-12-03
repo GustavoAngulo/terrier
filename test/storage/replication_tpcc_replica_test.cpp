@@ -47,8 +47,8 @@ class ReplicationTPCCReplicaTest : public TerrierTest {
   const bool replica_logging_enabled_ = true;
 
   // Settings for RecoveryManager
-  const std::chrono::milliseconds metrics_overhead_polling_interval_{100};
-  const std::chrono::milliseconds metrics_overhead_threshold_{50};
+  const std::chrono::milliseconds metrics_overhead_polling_interval_{1000};
+  const std::chrono::milliseconds metrics_overhead_threshold_{100000000};
 
   // Settings for server
   uint32_t max_connections_ = 1;
