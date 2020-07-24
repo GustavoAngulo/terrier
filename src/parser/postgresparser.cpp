@@ -719,7 +719,6 @@ std::unique_ptr<AbstractExpression> PostgresParser::ValueTransform(ParseResult *
       result = std::make_unique<ConstantValueExpression>(type::TransientValueFactory::GetNull(type::TypeId::INVALID));
       break;
     }
-
     default: {
       PARSER_LOG_AND_THROW("ValueTransform", "Value type", val.type_);
     }
@@ -1315,10 +1314,6 @@ std::unique_ptr<SQLStatement> PostgresParser::CreateIndexTransform(ParseResult *
     index_type = IndexType::BWTREE;
   } else if (strcmp(access_method, "hash") == 0) {
     index_type = IndexType::HASH;
-  } else if (strcmp(access_method, "skiplist") == 0) {
-    index_type = IndexType::SKIPLIST;
-  } else if (strcmp(access_method, "art") == 0) {
-    index_type = IndexType::ART;
   } else {
     PARSER_LOG_DEBUG("CreateIndexTransform: IndexType {} not supported", access_method);
     throw NOT_IMPLEMENTED_EXCEPTION("CreateIndexTransform error");

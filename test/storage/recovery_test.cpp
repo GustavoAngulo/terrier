@@ -4,19 +4,21 @@
 #include "catalog/catalog.h"
 #include "catalog/postgres/pg_namespace.h"
 #include "gtest/gtest.h"
-#include "main/db_main.h"
+#include "metrics/metrics_manager.h"
+#include "metrics/metrics_thread.h"
+#include "metrics/recovery_metric.h"
 #include "storage/garbage_collector_thread.h"
 #include "storage/index/index_builder.h"
 #include "storage/recovery/disk_log_provider.h"
 #include "storage/recovery/recovery_manager.h"
 #include "storage/sql_table.h"
 #include "storage/write_ahead_log/log_manager.h"
+#include "test_util/catalog_test_util.h"
+#include "test_util/sql_table_test_util.h"
+#include "test_util/storage_test_util.h"
+#include "test_util/test_harness.h"
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_manager.h"
-#include "util/catalog_test_util.h"
-#include "util/sql_table_test_util.h"
-#include "util/storage_test_util.h"
-#include "util/test_harness.h"
 
 // Make sure that if you create additional files, you call unlink on them after the test finishes. Otherwise, repeated
 // executions will read old test's data, and the cause of the errors will be hard to identify. Trust me it will drive
@@ -244,6 +246,45 @@ class RecoveryTests : public TerrierTest {
         recovery_txn_manager_->Commit(recovery_txn, transaction::TransactionUtil::EmptyCallback, nullptr);
       }
     }
+
+    delete tested;
+  }
+
+  void RunTestWithMetrics(const LargeSqlTableTestConfiguration &config) {
+    // Run workload
+    auto *tested = new LargeSqlTableTestObject(config, txn_manager_, catalog_, &block_store_, &generator_);
+    tested->SimulateOltp(100, 4);
+
+    ShutdownAndRestartSystem();
+
+    // Enable metrics for recovery
+    const std::chrono::milliseconds metrics_period{10};
+    auto *const metrics_thread = new metrics::MetricsThread(metrics_period);
+    metrics_thread->GetMetricsManager().EnableMetric(metrics::MetricsComponent::RECOVERY);
+    common::ManagedPointer<metrics::MetricsManager> metrics_manager(&(metrics_thread->GetMetricsManager()));
+
+    // Create a separate thread registry so we don't mess up the one used in SetUp()
+    auto metric_thread_registry = new common::DedicatedThreadRegistry(metrics_manager);
+
+    // Instantiate recovery manager, and recover the tables.
+    DiskLogProvider log_provider(LOG_FILE_NAME);
+    RecoveryManager recovery_manager(&log_provider, common::ManagedPointer(recovery_catalog_), recovery_txn_manager_,
+                                     recovery_deferred_action_manager_, common::ManagedPointer(metric_thread_registry),
+                                     &block_store_);
+    recovery_manager.StartRecovery();
+    recovery_manager.WaitForRecoveryToFinish();
+
+    // Make sure everything is finished
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    // See if anything is logged at all
+    // It is possible for aggregated_data to contain no objects, but it should not be a nullptr
+    const auto aggregated_data = reinterpret_cast<metrics::RecoveryMetricRawData *>(
+        metrics_manager->AggregatedMetrics().at(static_cast<uint8_t>(metrics::MetricsComponent::RECOVERY)).get());
+    EXPECT_NE(aggregated_data, nullptr);
+
+    delete metric_thread_registry;
+    delete metrics_thread;
     delete tested;
   }
 };
@@ -262,6 +303,23 @@ TEST_F(RecoveryTests, SingleTableTest) {
                                               .SetVarlenAllowed(true)
                                               .Build();
   RecoveryTests::RunTest(config);
+}
+
+// This test inserts some tuples into a single table. It then recreates the test table from
+// the log, and verifies that this new table is the same as the original table. Finally,
+// it compares the metrics with the actual data
+// NOLINTNEXTLINE
+TEST_F(RecoveryTests, RecoveryMetricsTest) {
+  LargeSqlTableTestConfiguration config = LargeSqlTableTestConfiguration::Builder()
+                                              .SetNumDatabases(1)
+                                              .SetNumTables(1)
+                                              .SetMaxColumns(5)
+                                              .SetInitialTableSize(1000)
+                                              .SetTxnLength(5)
+                                              .SetInsertUpdateSelectDeleteRatio({1.0, 0.0, 0.0, 0.0})
+                                              .SetVarlenAllowed(true)
+                                              .Build();
+  RecoveryTests::RunTestWithMetrics(config);
 }
 
 // This test checks that we recover correctly in a high abort rate workload. We achieve the high abort rate by having
@@ -359,7 +417,6 @@ TEST_F(RecoveryTests, DropTableTest) {
 
   // Assert the table we deleted doesn't exist
   EXPECT_EQ(catalog::INVALID_TABLE_OID, db_catalog->GetTableOid(txn, namespace_oid, table_name));
-  EXPECT_FALSE(db_catalog->GetTable(txn, table_oid));
   recovery_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
 }
 
@@ -402,7 +459,6 @@ TEST_F(RecoveryTests, DropIndexTest) {
 
   // Assert the index we deleted doesn't exist
   EXPECT_EQ(0, db_catalog->GetIndexOids(txn, table_oid).size());
-  EXPECT_FALSE(db_catalog->GetIndex(txn, index_oid));
   recovery_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
 }
 
@@ -662,7 +718,6 @@ TEST_F(RecoveryTests, ConcurrentDDLChangesTest) {
 
   // Assert the table we deleted doesn't exist
   EXPECT_EQ(catalog::INVALID_TABLE_OID, db_catalog->GetTableOid(txn, namespace_oid, table_name));
-  EXPECT_FALSE(db_catalog->GetTable(txn, table_oid));
   recovery_txn_manager_->Commit(txn, transaction::TransactionUtil::EmptyCallback, nullptr);
 }
 

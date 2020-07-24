@@ -16,8 +16,8 @@
 #include "parser/pg_trigger.h"
 #include "parser/postgresparser.h"
 
+#include "test_util/test_harness.h"
 #include "type/transient_value_peeker.h"
-#include "util/test_harness.h"
 
 namespace terrier::parser {
 
@@ -57,6 +57,12 @@ TEST_F(ParserTestBase, AnalyzeTest) {
   auto analyze_stmt = result.GetStatement(0).CastManagedPointerTo<AnalyzeStatement>();
   EXPECT_EQ(analyze_stmt->GetType(), StatementType::ANALYZE);
   EXPECT_EQ(analyze_stmt->GetAnalyzeTable()->GetTableName(), "table_name");
+}
+
+// NOLINTNEXTLINE
+TEST_F(ParserTestBase, NOOPTest) {
+  auto result = pgparser_.BuildParseTree(";");
+  EXPECT_EQ(result.GetStatements().size(), 0);
 }
 
 // NOLINTNEXTLINE
@@ -1270,13 +1276,13 @@ TEST_F(ParserTestBase, OldCreateIndexTest) {
   EXPECT_EQ(create_stmt->GetIndexAttributes()[0].GetName(), "o_w_id");
   EXPECT_EQ(create_stmt->GetIndexAttributes()[1].GetName(), "o_d_id");
 
-  query = "CREATE INDEX ii ON t USING SKIPLIST (col);";
+  query = "CREATE INDEX ii ON t USING HASH (col);";
   result = pgparser_.BuildParseTree(query);
   create_stmt = result.GetStatement(0).CastManagedPointerTo<CreateStatement>();
 
   // Check attributes
   EXPECT_EQ(create_stmt->GetCreateType(), CreateStatement::kIndex);
-  EXPECT_EQ(create_stmt->GetIndexType(), IndexType::SKIPLIST);
+  EXPECT_EQ(create_stmt->GetIndexType(), IndexType::HASH);
   EXPECT_EQ(create_stmt->GetIndexName(), "ii");
   EXPECT_EQ(create_stmt->GetTableName(), "t");
 

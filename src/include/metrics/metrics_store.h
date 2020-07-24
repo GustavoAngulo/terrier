@@ -10,6 +10,7 @@
 #include "metrics/abstract_raw_data.h"
 #include "metrics/logging_metric.h"
 #include "metrics/metrics_defs.h"
+#include "metrics/recovery_metric.h"
 #include "metrics/transaction_metric.h"
 
 namespace terrier::metrics {
@@ -75,6 +76,18 @@ class MetricsStore {
   }
 
   /**
+   * Record throughput metrics for recovery manager during recovery
+   * @param num_txns number of transactions
+   * @param num_bytes size of log files processed
+   * @param elapsed_us time taken to execute the transactions
+   */
+  void RecordRecoveryData(const uint64_t num_txns, const uint64_t num_bytes, const uint64_t elapsed_us) {
+    TERRIER_ASSERT(ComponentEnabled(MetricsComponent::RECOVERY), "RecoveryMetric not enabled.");
+    TERRIER_ASSERT(txn_metric_ != nullptr, "RecoveryMetric not allocated. Check MetricsStore constructor.");
+    recovery_metric_->RecordRecoveryData(num_txns, num_bytes, elapsed_us);
+  }
+
+  /**
    * @param component metrics component to test
    * @return true if metrics enabled for this component, false otherwise
    */
@@ -99,6 +112,7 @@ class MetricsStore {
 
   std::unique_ptr<LoggingMetric> logging_metric_;
   std::unique_ptr<TransactionMetric> txn_metric_;
+  std::unique_ptr<RecoveryMetric> recovery_metric_;
 
   const std::bitset<NUM_COMPONENTS> &enabled_metrics_;
 };

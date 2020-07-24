@@ -13,7 +13,7 @@
 #include "planner/plannodes/hash_join_plan_node.h"
 #include "planner/plannodes/hash_plan_node.h"
 #include "planner/plannodes/seq_scan_plan_node.h"
-#include "util/test_harness.h"
+#include "test_util/test_harness.h"
 
 namespace terrier::planner {
 
@@ -95,56 +95,6 @@ TEST(PlanNodeTest, AnalyzePlanTest) {
     EXPECT_NE(*plan, *plan3);
     EXPECT_NE(plan->Hash(), plan3->Hash());
   }
-}
-
-// NOLINTNEXTLINE
-TEST(PlanNodeTest, CreateDatabasePlanTest) {
-  parser::PostgresParser pgparser;
-  auto result = pgparser.BuildParseTree("CREATE DATABASE test");
-  EXPECT_EQ(1, result.GetStatements().size());
-  auto *create_stmt = static_cast<parser::CreateStatement *>(result.TakeStatementsOwnership()[0].release());
-
-  CreateDatabasePlanNode::Builder builder;
-  auto plan = builder.SetFromCreateStatement(create_stmt).Build();
-
-  EXPECT_TRUE(plan != nullptr);
-  EXPECT_STREQ("test", plan->GetDatabaseName().c_str());
-  EXPECT_EQ(PlanNodeType::CREATE_DATABASE, plan->GetPlanNodeType());
-  delete create_stmt;
-}
-
-// NOLINTNEXTLINE
-TEST(PlanNodeTest, DropDatabasePlanTest) {
-  parser::PostgresParser pgparser;
-  auto result = pgparser.BuildParseTree("DROP DATABASE test");
-  EXPECT_EQ(1, result.GetStatements().size());
-  auto *drop_stmt = static_cast<parser::DropStatement *>(result.TakeStatementsOwnership()[0].release());
-
-  DropDatabasePlanNode::Builder builder;
-  auto plan = builder.SetDatabaseOid(catalog::db_oid_t(0)).SetFromDropStatement(drop_stmt).Build();
-
-  EXPECT_TRUE(plan != nullptr);
-  EXPECT_EQ(catalog::db_oid_t(0), plan->GetDatabaseOid());
-  EXPECT_FALSE(plan->IsIfExists());
-  EXPECT_EQ(PlanNodeType::DROP_DATABASE, plan->GetPlanNodeType());
-  delete drop_stmt;
-}
-
-// NOLINTNEXTLINE
-TEST(PlanNodeTest, DropDatabasePlanIfExistsTest) {
-  parser::PostgresParser pgparser;
-  auto result = pgparser.BuildParseTree("DROP DATABASE IF EXISTS test");
-  EXPECT_EQ(1, result.GetStatements().size());
-  auto *drop_stmt = static_cast<parser::DropStatement *>(result.TakeStatementsOwnership()[0].release());
-
-  DropDatabasePlanNode::Builder builder;
-  auto plan = builder.SetDatabaseOid(catalog::db_oid_t(0)).SetFromDropStatement(drop_stmt).Build();
-
-  EXPECT_TRUE(plan != nullptr);
-  EXPECT_EQ(catalog::db_oid_t(0), plan->GetDatabaseOid());
-  EXPECT_TRUE(plan->IsIfExists());
-  EXPECT_EQ(PlanNodeType::DROP_DATABASE, plan->GetPlanNodeType());
-  delete drop_stmt;
 }
 
 // Test creation of simple two table join.

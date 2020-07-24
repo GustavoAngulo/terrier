@@ -19,6 +19,8 @@
 #include "storage/sql_table.h"
 #include "transaction/transaction_manager.h"
 
+#include "common/scoped_timer.h"
+
 namespace terrier {
 class RecoveryBenchmark;
 }
@@ -169,8 +171,9 @@ class RecoveryManager : public common::DedicatedThreadOwner {
   /**
    * @brief Replay a committed transaction corresponding to txn_id.
    * @param txn_id start timestamp for committed transaction
+   * @return total size of records
    */
-  void ProcessCommittedTransaction(transaction::timestamp_t txn_id);
+  uint64_t ProcessCommittedTransaction(transaction::timestamp_t txn_id);
 
   /**
    * Defers log records deletes with the transaction manager
@@ -207,6 +210,8 @@ class RecoveryManager : public common::DedicatedThreadOwner {
                                                                       catalog::db_oid_t db_oid) {
     auto db_catalog_ptr = catalog_->GetDatabaseCatalog(txn, db_oid);
     TERRIER_ASSERT(db_catalog_ptr != nullptr, "No catalog for given database oid");
+    auto result UNUSED_ATTRIBUTE = db_catalog_ptr->TryLock(txn);
+    TERRIER_ASSERT(result, "There should not be concurrent DDL changes during recovery.");
     return db_catalog_ptr;
   }
 
